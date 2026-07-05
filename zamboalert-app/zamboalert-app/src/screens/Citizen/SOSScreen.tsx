@@ -1,4 +1,4 @@
-// src/screens/SOSScreen.js
+// src/screens/SOSScreen.tsx
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
@@ -12,8 +12,32 @@ import AlertBanner from '../components/AlertBanner';
 import Card from '../components/Card';
 import { useAppState } from '../context/AppStateContext';
 
+// ─── Types ──────────────────────────────────────────────────────────────────
+type Disaster = {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bg: string;
+};
+
+type DisasterCardProps = {
+  disaster: Disaster;
+  active: boolean;
+  dimmed: boolean;
+  onPress: () => void;
+};
+
+type StatusRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  ok: boolean;
+  isLast?: boolean;
+};
+
 // ─── Disaster types ─────────────────────────────────────────────────────────
-const DISASTERS = [
+const DISASTERS: Disaster[] = [
   {
     id: 'earthquake',
     label: 'Earthquake',
@@ -58,7 +82,7 @@ export default function SOSScreen({ navigation }) {
     ? `Broadcasting · ${nearbyPods.length} pod${nearbyPods.length === 1 ? '' : 's'} in range`
     : 'Tap your emergency to send SOS instantly';
 
-  function handleTap(disaster) {
+  function handleTap(disaster: Disaster) {
     if (sosActive) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     startBeacon(disaster.id);
@@ -80,6 +104,7 @@ export default function SOSScreen({ navigation }) {
       {sosActive && activeDisaster && (
         <AlertBanner
           message={`SOS ACTIVE — ${activeDisaster.label.toUpperCase()} EMERGENCY`}
+          onPress={() => {}}
         />
       )}
 
@@ -137,7 +162,7 @@ export default function SOSScreen({ navigation }) {
 }
 
 // ─── Disaster card ──────────────────────────────────────────────────────────
-function DisasterCard({ disaster, active, dimmed, onPress }) {
+function DisasterCard({ disaster, active, dimmed, onPress }: DisasterCardProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -225,7 +250,7 @@ const cardStyles = StyleSheet.create({
 });
 
 // ─── Status row ──────────────────────────────────────────────────────────────
-function StatusRow({ icon, label, value, ok, isLast }) {
+function StatusRow({ icon, label, value, ok, isLast }: StatusRowProps) {
   return (
     <View style={[styles.statusRow, !isLast && styles.statusRowBorder]}>
       <View style={styles.statusLeft}>

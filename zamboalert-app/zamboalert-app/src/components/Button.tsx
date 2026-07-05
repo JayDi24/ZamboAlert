@@ -4,7 +4,27 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
 
-export function PrimaryButton({ label, icon, onPress, disabled, fullWidth = true }) {
+type PrimaryButtonProps = {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  fullWidth?: boolean;
+};
+
+type SecondaryButtonProps = {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  fullWidth?: boolean;
+};
+
+type SOSButtonProps = {
+  active: boolean;
+  onPress: () => void;
+};
+
+export function PrimaryButton({ label, icon, onPress, disabled, fullWidth = true }: PrimaryButtonProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -22,7 +42,7 @@ export function PrimaryButton({ label, icon, onPress, disabled, fullWidth = true
   );
 }
 
-export function SecondaryButton({ label, icon, onPress, fullWidth = false }) {
+export function SecondaryButton({ label, icon, onPress, fullWidth = false }: SecondaryButtonProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -38,7 +58,7 @@ export function SecondaryButton({ label, icon, onPress, fullWidth = false }) {
   );
 }
 
-export function SOSButton({ active, onPress }) {
+export function SOSButton({ active, onPress }: SOSButtonProps) {
   function handlePress() {
     Haptics.notificationAsync(
       active ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success

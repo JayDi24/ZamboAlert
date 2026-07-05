@@ -9,12 +9,34 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { PrimaryButton } from '../../components/Button';
-import { useAuth } from '../../context/AuthContext';
+import PasswordStrength from '../../components/PasswordStrength';
+import { useAuth, MIN_PASSWORD_SCORE, checkPasswordPolicy } from '../../context/AuthContext';
+
+type RolePillProps = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  description: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+type InputFieldProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  placeholder: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  secureTextEntry?: boolean;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  rightIcon?: keyof typeof Ionicons.glyphMap;
+  onRightIconPress?: () => void;
+};
 
 export default function SignUpScreen({ navigation }) {
   const { signUp, loading, error, clearError } = useAuth();
   const [role, setRole]               = useState('citizen');
-  const [name, setName]               = useState('');
+  const [firstName, setFirstName]     = useState('');
+  const [lastName, setLastName]       = useState('');
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
   const [confirm, setConfirm]         = useState('');
@@ -27,11 +49,21 @@ export default function SignUpScreen({ navigation }) {
 
   async function handleSignUp() {
     setLocalError('');
-    if (!name.trim())         { setLocalError('Please enter your full name.'); return; }
+    if (!firstName.trim())    { setLocalError('Please enter your first name.'); return; }
+    if (!lastName.trim())     { setLocalError('Please enter your last name.'); return; }
     if (!email.includes('@')) { setLocalError('Please enter a valid email address.'); return; }
-    if (password.length < 8)  { setLocalError('Password must be at least 8 characters.'); return; }
-    if (password !== confirm)  { setLocalError('Passwords do not match.'); return; }
-    await signUp(name, email, password, role);
+    if (checkPasswordPolicy(password).score < MIN_PASSWORD_SCORE) {
+      setLocalError('Password must meet at least 4 of the 5 requirements below.');
+      return;
+    }
+    if (password !== confirm) { setLocalError('Passwords do not match.'); return; }
+
+    const started = await signUp(firstName, lastName, email, password, role);
+    // On success, AuthContext switches into its email-verification step and
+    // RootNavigator/LoginScreen picks that up — nothing else to do here.
+    if (started) {
+      navigation.navigate('Login');
+    }
   }
 
   return (
@@ -66,9 +98,18 @@ export default function SignUpScreen({ navigation }) {
             </View>
           )}
 
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Full name</Text>
-          <InputField icon="person-outline" placeholder="Juan Dela Cruz" value={name}
-            onChangeText={(t) => { setName(t); handleChange(); }} autoCapitalize="words" />
+          <View style={styles.nameRow}>
+            <View style={styles.nameField}>
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>First name</Text>
+              <InputField icon="person-outline" placeholder="Juan" value={firstName}
+                onChangeText={(t) => { setFirstName(t); handleChange(); }} autoCapitalize="words" />
+            </View>
+            <View style={styles.nameField}>
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>Last name</Text>
+              <InputField icon="person-outline" placeholder="Dela Cruz" value={lastName}
+                onChangeText={(t) => { setLastName(t); handleChange(); }} autoCapitalize="words" />
+            </View>
+          </View>
 
           <Text style={[typography.eyebrow, styles.fieldLabel]}>Email</Text>
           <InputField icon="mail-outline" placeholder="you@example.com" value={email}
@@ -80,6 +121,8 @@ export default function SignUpScreen({ navigation }) {
             secureTextEntry={!showPassword}
             rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
             onRightIconPress={() => setShowPass(!showPassword)} />
+
+          <PasswordStrength password={password} />
 
           <Text style={[typography.eyebrow, styles.fieldLabel]}>Confirm password</Text>
           <InputField icon="lock-closed-outline" placeholder="Re-enter your password" value={confirm}
@@ -99,7 +142,7 @@ export default function SignUpScreen({ navigation }) {
             {loading
               ? <ActivityIndicator color={colors.primary} size="large" />
               : <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
-                  disabled={!name.trim() || !email.trim() || !password || !confirm} />
+                  disabled={!firstName.trim() || !lastName.trim() || !email.trim() || !password || !confirm} />
             }
           </View>
 
@@ -116,7 +159,7 @@ export default function SignUpScreen({ navigation }) {
   );
 }
 
-function RolePill({ label, icon, description, active, onPress }) {
+function RolePill({ label, icon, description, active, onPress }: RolePillProps) {
   return (
     <Pressable onPress={onPress} style={[styles.rolePill, active && styles.rolePillActive]}>
       <View style={[styles.rolePillIcon, active && styles.rolePillIconActive]}>
@@ -129,7 +172,7 @@ function RolePill({ label, icon, description, active, onPress }) {
   );
 }
 
-function InputField({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, rightIcon, onRightIconPress }) {
+function InputField({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, rightIcon, onRightIconPress }: InputFieldProps) {
   return (
     <View style={styles.inputWrap}>
       <Ionicons name={icon} size={18} color={colors.textSecondary} />
@@ -163,6 +206,8 @@ const styles = StyleSheet.create({
   rolePillDesc: { fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 15 },
   checkmark: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(47,111,237,0.08)', borderRadius: 10, padding: 12, marginBottom: 20 },
+  nameRow: { flexDirection: 'row', gap: 12 },
+  nameField: { flex: 1 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 10 },
   input: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(224,52,43,0.08)', borderRadius: 10, padding: 12, marginBottom: 8 },

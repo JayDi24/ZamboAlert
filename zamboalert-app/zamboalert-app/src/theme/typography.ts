@@ -46,6 +46,6 @@ export const typography = {
 
   // Tab bar label
   tabLabel: { fontFamily: fontFamily.medium, fontSize: 11 },
-};
+} as const;
 
 export default typography;

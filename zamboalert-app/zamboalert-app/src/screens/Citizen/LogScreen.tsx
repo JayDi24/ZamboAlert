@@ -2,11 +2,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import Header from '../components/Header';
-import Card from '../components/Card';
-import { useAppState } from '../context/AppStateContext';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import Header from '../../components/Header';
+import Card from '../../components/Card';
+import { useAppState } from '../../context/AppStateContext';
 
 const ICONS = {
   sos: { name: 'warning', color: colors.statusCritical },

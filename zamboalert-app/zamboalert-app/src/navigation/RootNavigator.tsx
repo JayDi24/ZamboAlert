@@ -15,7 +15,7 @@ import SignUpScreen   from '../screens/auth/SignUpScreen';
 
 import SOSScreen      from '../screens/SOSScreen';
 import StatusScreen   from '../screens/StatusScreen';
-import LogScreen      from '../screens/LogScreen';
+import LogScreen      from '../screens/Citizen/LogScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import RescuerPlaceholderScreen from '../screens/RescuerPlaceholderScreen';
 
@@ -32,6 +32,7 @@ const TAB_ICONS = {
 function CitizenTabs() {
   return (
     <Tab.Navigator
+    id={undefined}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: styles.tabBar,
@@ -65,6 +66,7 @@ function CitizenTabs() {
 function AuthStack() {
   return (
     <Stack.Navigator
+    id={undefined}
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.textPrimary,
