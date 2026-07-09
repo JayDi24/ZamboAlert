@@ -1,13 +1,14 @@
-// src/components/Header.js
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
 export default function Header({ statusLine, statusDotColor = colors.primary, onSettingsPress }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]}>
       <View style={styles.topRow}>
         <View style={styles.brandRow}>
           <View style={styles.logoChip}>

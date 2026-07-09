@@ -86,6 +86,10 @@ export function SessionSettingsSection({
           <Text style={settingsStyles.value}>{currentUser.email}</Text>
         </View>
         <View style={settingsStyles.row}>
+          <Text style={settingsStyles.label}>Contact:</Text>
+          <Text style={settingsStyles.value}>{(currentUser as any).contactNumber || 'N/A'}</Text>
+        </View>
+        <View style={settingsStyles.row}>
           <Text style={settingsStyles.label}>Status:</Text>
           <Text style={[settingsStyles.value, { color: "#10b981", fontWeight: "bold" }]}>
             VERIFIED RESCUER

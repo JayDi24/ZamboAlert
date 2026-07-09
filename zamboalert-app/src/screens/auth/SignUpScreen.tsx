@@ -37,12 +37,16 @@ export default function SignUpScreen({ navigation }) {
   const [role, setRole]               = useState('citizen');
   const [firstName, setFirstName]     = useState('');
   const [lastName, setLastName]       = useState('');
+  const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
   const [confirm, setConfirm]         = useState('');
   const [showPassword, setShowPass]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [localError, setLocalError]   = useState('');
+  const [idType, setIdType]           = useState('Barangay ID');
+  const [idNumber, setIdNumber]       = useState('');
+  const [idPhotoUploaded, setIdPhotoUploaded] = useState(false);
 
   const combinedError = localError || error;
   function handleChange() { if (localError) setLocalError(''); if (error) clearError(); }
@@ -51,6 +55,12 @@ export default function SignUpScreen({ navigation }) {
     setLocalError('');
     if (!firstName.trim())    { setLocalError('Please enter your first name.'); return; }
     if (!lastName.trim())     { setLocalError('Please enter your last name.'); return; }
+    if (!contactNumber.trim()) { setLocalError('Please enter your contact number.'); return; }
+    if (contactNumber.trim().length < 7) { setLocalError('Please enter a valid contact number.'); return; }
+    if (role === 'rescuer') {
+      if (!idNumber.trim()) { setLocalError('Please enter your ID number.'); return; }
+      if (!idPhotoUploaded) { setLocalError('Please upload your ID photo.'); return; }
+    }
     if (!email.includes('@')) { setLocalError('Please enter a valid email address.'); return; }
     if (checkPasswordPolicy(password).score < MIN_PASSWORD_SCORE) {
       setLocalError('Password must meet at least 4 of the 5 requirements below.');
@@ -58,7 +68,7 @@ export default function SignUpScreen({ navigation }) {
     }
     if (password !== confirm) { setLocalError('Passwords do not match.'); return; }
 
-    const started = await signUp(firstName, lastName, email, password, role);
+    const started = await signUp(firstName, lastName, email, password, role, contactNumber, idType, idNumber);
     // On success, AuthContext switches into its email-verification step and
     // RootNavigator/LoginScreen picks that up — nothing else to do here.
     if (started) {
@@ -89,20 +99,56 @@ export default function SignUpScreen({ navigation }) {
             <RolePill label="Rescuer" icon="shield-outline" description="I respond to emergencies" active={role === 'rescuer'} onPress={() => { setRole('rescuer'); handleChange(); }} />
           </View>
 
+          {role === 'rescuer' && (
+            <>
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>Select ID Type</Text>
+              <View style={styles.idTypeRow}>
+                <Pressable
+                  style={[styles.idTypePill, idType === 'Barangay ID' && styles.idTypePillActive]}
+                  onPress={() => { setIdType('Barangay ID'); handleChange(); }}
+                >
+                  <Text style={[styles.idTypePillText, idType === 'Barangay ID' && styles.idTypePillTextActive]}>Barangay ID</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.idTypePill, idType === 'Government ID' && styles.idTypePillActive]}
+                  onPress={() => { setIdType('Government ID'); handleChange(); }}
+                >
+                  <Text style={[styles.idTypePillText, idType === 'Government ID' && styles.idTypePillTextActive]}>Government ID</Text>
+                </Pressable>
+              </View>
 
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>ID Number</Text>
+              <InputField icon="card-outline" placeholder="e.g. BRGY-12345" value={idNumber}
+                onChangeText={(t) => { setIdNumber(t); handleChange(); }} />
 
-          <View style={styles.nameRow}>
-            <View style={styles.nameField}>
-              <Text style={[typography.eyebrow, styles.fieldLabel]}>First name</Text>
-              <InputField icon="person-outline" placeholder="Juan" value={firstName}
-                onChangeText={(t) => { setFirstName(t); handleChange(); }} autoCapitalize="words" />
-            </View>
-            <View style={styles.nameField}>
-              <Text style={[typography.eyebrow, styles.fieldLabel]}>Last name</Text>
-              <InputField icon="person-outline" placeholder="Dela Cruz" value={lastName}
-                onChangeText={(t) => { setLastName(t); handleChange(); }} autoCapitalize="words" />
-            </View>
-          </View>
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>Upload ID Photo</Text>
+              <Pressable
+                style={[styles.uploadBtn, idPhotoUploaded && styles.uploadBtnActive]}
+                onPress={() => { setIdPhotoUploaded(true); handleChange(); }}
+              >
+                <Ionicons
+                  name={idPhotoUploaded ? 'checkmark-circle-outline' : 'cloud-upload-outline'}
+                  size={18}
+                  color={idPhotoUploaded ? colors.primary : colors.textSecondary}
+                />
+                <Text style={[styles.uploadBtnText, idPhotoUploaded && styles.uploadBtnTextActive]}>
+                  {idPhotoUploaded ? 'id_photo.jpg (Uploaded)' : 'Select image/document'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+
+          <Text style={[typography.eyebrow, styles.fieldLabel]}>First name</Text>
+          <InputField icon="person-outline" placeholder="John" value={firstName}
+            onChangeText={(t) => { setFirstName(t); handleChange(); }} autoCapitalize="words" />
+
+          <Text style={[typography.eyebrow, styles.fieldLabel]}>Last name</Text>
+          <InputField icon="person-outline" placeholder="Doe" value={lastName}
+            onChangeText={(t) => { setLastName(t); handleChange(); }} autoCapitalize="words" />
+
+          <Text style={[typography.eyebrow, styles.fieldLabel]}>Contact number</Text>
+          <InputField icon="call-outline" placeholder="Enter your number" value={contactNumber}
+            onChangeText={(t) => { setContactNumber(t); handleChange(); }} keyboardType="phone-pad" />
 
           <Text style={[typography.eyebrow, styles.fieldLabel]}>Email</Text>
           <InputField icon="mail-outline" placeholder="you@example.com" value={email}
@@ -135,7 +181,7 @@ export default function SignUpScreen({ navigation }) {
             {loading
               ? <ActivityIndicator color={colors.primary} size="large" />
               : <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
-                  disabled={!firstName.trim() || !lastName.trim() || !email.trim() || !password || !confirm} />
+                  disabled={!firstName.trim() || !lastName.trim() || !contactNumber.trim() || !email.trim() || !password || !confirm} />
             }
           </View>
 
@@ -198,9 +244,16 @@ const styles = StyleSheet.create({
   rolePillTextActive: { color: colors.primary },
   rolePillDesc: { fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 15 },
   checkmark: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  idTypeRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  idTypePill: { flex: 1, alignItems: 'center', padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
+  idTypePillActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  idTypePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.textSecondary },
+  idTypePillTextActive: { color: colors.primary },
+  uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.surface, marginBottom: 16 },
+  uploadBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  uploadBtnText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.textSecondary },
+  uploadBtnTextActive: { color: colors.primary },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(47,111,237,0.08)', borderRadius: 10, padding: 12, marginBottom: 20 },
-  nameRow: { flexDirection: 'row', gap: 12 },
-  nameField: { flex: 1 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 10 },
   input: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(224,52,43,0.08)', borderRadius: 10, padding: 12, marginBottom: 8 },

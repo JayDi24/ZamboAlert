@@ -50,6 +50,7 @@ export default function SettingsScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={typography.entryTitle}>{user?.name}</Text>
               <Text style={typography.meta}>{user?.email}</Text>
+              {user?.contactNumber ? <Text style={typography.meta}>{user?.contactNumber}</Text> : null}
             </View>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>{user?.role}</Text>

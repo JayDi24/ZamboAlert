@@ -9,6 +9,7 @@ export interface UserRecord {
   mfaSecret: string;
   failedAttempts: number;
   lockoutUntil?: number;
+  contactNumber?: string;
 }
 
 export interface SessionDetails {

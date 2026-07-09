@@ -111,6 +111,10 @@ type UserRecord = {
   passwordResetCode?: string;
   mfaEnabled: boolean;
   mfaSecret: string;
+  contactNumber: string;
+  idType?: string;
+  idNumber?: string;
+  isRescuerVerified?: boolean;
 };
 
 type PublicUser = {
@@ -122,6 +126,10 @@ type PublicUser = {
   role: Role;
   mfaEnabled: boolean;
   mfaSecret: string;
+  contactNumber: string;
+  idType?: string;
+  idNumber?: string;
+  isRescuerVerified?: boolean;
 };
 
 export type SessionDetails = {
@@ -150,7 +158,7 @@ type AuthContextType = {
   devCode: string | null;
 
   login: (email: string, password: string, role: string) => Promise<void>;
-  signUp: (firstName: string, lastName: string, email: string, password: string, role: string) => Promise<boolean>;
+  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string) => Promise<boolean>;
   logout: () => void;
   updateUser: (updates: Partial<Pick<UserRecord, 'mfaEnabled' | 'mfaSecret'>>) => void;
 
@@ -176,11 +184,16 @@ let SESSION_USERS: UserRecord[] = [
     id: '1', firstName: 'Test', lastName: 'Citizen', email: 'citizen@test.com',
     passwordHash: sha256('test1234'), role: 'citizen',
     failedAttempts: 0, isVerified: true, mfaEnabled: false, mfaSecret: '',
+    contactNumber: '+639123456789',
   },
   {
     id: '2', firstName: 'Test', lastName: 'Rescuer', email: 'rescuer@test.com',
     passwordHash: sha256('test1234'), role: 'rescuer',
     failedAttempts: 0, isVerified: true, mfaEnabled: false, mfaSecret: '',
+    contactNumber: '+639987654321',
+    idType: 'Barangay ID',
+    idNumber: 'BRGY-R01',
+    isRescuerVerified: true,
   },
 ];
 
@@ -206,6 +219,10 @@ function toPublicUser(u: UserRecord): PublicUser {
     role: u.role,
     mfaEnabled: u.mfaEnabled,
     mfaSecret: u.mfaSecret,
+    contactNumber: u.contactNumber,
+    idType: u.idType,
+    idNumber: u.idNumber,
+    isRescuerVerified: u.isRescuerVerified,
   };
 }
 
@@ -254,6 +271,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (found.role !== role) {
         setError(`This account is registered as a ${found.role}, not a ${role}.`);
+        return;
+      }
+      if (found.role === 'rescuer' && found.isRescuerVerified === false) {
+        setError('Your rescuer account is pending verification by the admin dashboard.');
         return;
       }
       clearLockoutIfNeeded(found);
@@ -317,6 +338,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       found.emailVerificationCode = undefined;
       setDevCode(null);
 
+      if (found.role === 'rescuer' && found.isRescuerVerified === false) {
+        setError('Email verified. Your account is pending admin verification before you can log in.');
+        setAuthStep('login');
+        setPendingEmail('');
+        return true;
+      }
+
       if (found.mfaEnabled) {
         setAuthStep('mfa');
         return true;
@@ -365,7 +393,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signUp(firstName: string, lastName: string, email: string, password: string, role: string): Promise<boolean> {
+  async function signUp(
+    firstName: string,
+    lastName: string,
+    email: string,
+    password: string,
+    role: string,
+    contactNumber: string,
+    idType?: string,
+    idNumber?: string
+  ): Promise<boolean> {
     setLoading(true);
     setError('');
     try {
@@ -391,6 +428,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isVerified: false,
         mfaEnabled: false,
         mfaSecret: '',
+        contactNumber: contactNumber.trim(),
+        idType: role === 'rescuer' ? idType : undefined,
+        idNumber: role === 'rescuer' ? idNumber : undefined,
+        isRescuerVerified: role === 'rescuer' ? false : undefined,
       };
       newUser.emailVerificationCode = generateCode();
       SESSION_USERS.push(newUser);

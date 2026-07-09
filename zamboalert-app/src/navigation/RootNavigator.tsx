@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -30,12 +31,13 @@ const TAB_ICONS = {
 };
 
 function CitizenTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
     id={undefined}
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { height: 64 + insets.bottom, paddingBottom: 8 + insets.bottom }],
         tabBarIcon: ({ focused }) => {
           const icons = TAB_ICONS[route.name];
           return (
@@ -74,7 +76,7 @@ function AuthStack() {
         headerShadowVisible: false,
       }}
     >
-      <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'Get Started' }} />
+      <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Login"   component={LoginScreen}   options={{ title: 'Login' }} />
       <Stack.Screen name="SignUp"  component={SignUpScreen}  options={{ title: 'Sign Up' }} />
     </Stack.Navigator>
