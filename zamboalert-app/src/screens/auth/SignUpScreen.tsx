@@ -89,14 +89,7 @@ export default function SignUpScreen({ navigation }) {
             <RolePill label="Rescuer" icon="shield-outline" description="I respond to emergencies" active={role === 'rescuer'} onPress={() => { setRole('rescuer'); handleChange(); }} />
           </View>
 
-          {role === 'rescuer' && (
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle-outline" size={16} color={colors.statusSelf} />
-              <Text style={[typography.meta, { flex: 1, color: colors.statusSelf, lineHeight: 18 }]}>
-                The rescuer dashboard is coming soon. Your account will be ready when it launches.
-              </Text>
-            </View>
-          )}
+
 
           <View style={styles.nameRow}>
             <View style={styles.nameField}>

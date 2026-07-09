@@ -2,12 +2,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Switch, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import Header from '../components/Header';
-import Card from '../components/Card';
-import { SecondaryButton } from '../components/Button';
-import { useAuth } from '../context/AuthContext';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import Header from '../../components/Header';
+import Card from '../../components/Card';
+import { SecondaryButton } from '../../components/Button';
+import { useAuth } from '../../context/AuthContext';
 
 type FieldProps = {
   label: string;

@@ -13,12 +13,12 @@ import WelcomeScreen  from '../screens/auth/WelcomeScreen';
 import LoginScreen    from '../screens/auth/LoginScreen';
 import SignUpScreen   from '../screens/auth/SignUpScreen';
 
-import SOSScreen      from '../screens/SOSScreen';
-import StatusScreen   from '../screens/StatusScreen';
+import SOSScreen      from '../screens/Citizen/SOSScreen';
+import StatusScreen   from '../screens/Citizen/StatusScreen';
 import LogScreen      from '../screens/Citizen/LogScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import RescuerPlaceholderScreen from '../screens/RescuerPlaceholderScreen';
-
+import SettingsScreen from '../screens/Citizen/SettingsScreen';
+import { ToastProvider } from '../rescuer/context/ToastContext';
+import { MainTabNavigator as RescuerTabNavigator } from '../rescuer/navigation/MainTabNavigator';
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
@@ -84,15 +84,17 @@ function AuthStack() {
 export default function RootNavigator() {
   const { user } = useAuth();
   return (
-    <NavigationContainer>
-      {!user ? (
-        <AuthStack />
-      ) : user.role === 'rescuer' ? (
-        <RescuerPlaceholderScreen />
-      ) : (
-        <CitizenTabs />
-      )}
-    </NavigationContainer>
+    <ToastProvider>
+      <NavigationContainer>
+        {!user ? (
+          <AuthStack />
+        ) : user.role === 'rescuer' ? (
+          <RescuerTabNavigator />
+        ) : (
+          <CitizenTabs />
+        )}
+      </NavigationContainer>
+    </ToastProvider>
   );
 }
 

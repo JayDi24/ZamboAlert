@@ -2,12 +2,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import Header from '../components/Header';
-import Card from '../components/Card';
-import StatusDot from '../components/StatusDot';
-import { useAppState } from '../context/AppStateContext';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import Header from '../../components/Header';
+import Card from '../../components/Card';
+import StatusDot from '../../components/StatusDot';
+import { useAppState } from '../../context/AppStateContext';
 
 export default function StatusScreen({ navigation }) {
   const { sosActive, nearbyPods, coords, gpsLocked } = useAppState();

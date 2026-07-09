@@ -12,7 +12,7 @@ const ICONS = {
   sos: { name: 'warning', color: colors.statusCritical },
   detected: { name: 'checkmark-circle', color: colors.success },
   info: { name: 'information-circle', color: colors.statusUnknown },
-};
+} as const;
 
 export default function LogScreen({ navigation }) {
   const { log } = useAppState();

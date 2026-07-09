@@ -5,12 +5,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import Header from '../components/Header';
-import AlertBanner from '../components/AlertBanner';
-import Card from '../components/Card';
-import { useAppState } from '../context/AppStateContext';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import Header from '../../components/Header';
+import AlertBanner from '../../components/AlertBanner';
+import Card from '../../components/Card';
+import { useAppState } from '../../context/AppStateContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type Disaster = {
