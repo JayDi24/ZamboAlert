@@ -1,10 +1,244 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, Animated } from 'react-native';
+import { WebView } from 'react-native-webview';
 import Svg, { Circle, Line, Rect, G } from 'react-native-svg';
 import { Navigation, ShieldAlert, ChevronRight, MapPin, X, Layers, LifeBuoy, AlertTriangle } from 'lucide-react-native';
 import { Mono, PulsingDot } from './SharedUI';
 import { VICTIM_COORDS, situationColors } from '../assets/mockData';
 import { styles } from '../theme/styles';
+
+const LEAFLET_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: #f3f4f6;
+    }
+    .custom-pin {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      font-weight: bold;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      transition: all 0.2s ease-in-out;
+    }
+    .rescuer-pin {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background-color: #2563eb;
+      border: 2.5px solid #ffffff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.4);
+      position: relative;
+    }
+    @keyframes pulse {
+      0% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+      }
+      100% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+      }
+    }
+    .rescuer-pulsing {
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse-circle {
+      0% {
+        stroke-opacity: 0.3;
+        fill-opacity: 0.08;
+      }
+      50% {
+        stroke-opacity: 0.8;
+        fill-opacity: 0.18;
+      }
+      100% {
+        stroke-opacity: 0.3;
+        fill-opacity: 0.08;
+      }
+    }
+    .glowing-web {
+      animation: pulse-circle 2.5s infinite ease-in-out;
+      filter: drop-shadow(0 0 4px #2563eb);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', {
+      zoomControl: false
+    }).setView([6.9394, 122.0796], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    L.control.zoom({
+      position: 'bottomright'
+    }).addTo(map);
+
+    var rescuerIcon = L.divIcon({
+      className: 'rescuer-pulsing-container',
+      html: '<div class="rescuer-pin rescuer-pulsing"></div>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+
+    var rescuerMarker = L.marker([6.9394, 122.0796], { icon: rescuerIcon }).addTo(map);
+    rescuerMarker.bindPopup("<b>You (Rescuer Pod)</b><br>Barangay Tumaga, Zamboanga City");
+
+    var rangeCircle = L.circle([6.9394, 122.0796], {
+      radius: 1000,
+      color: '#2563eb',
+      fillColor: '#2563eb',
+      fillOpacity: 0.1,
+      weight: 1.5,
+      dashArray: '5, 5',
+      className: 'glowing-web'
+    }).addTo(map);
+
+    var victimMarkers = {};
+    var currentVictims = [];
+    var pathLine = null;
+
+    function getSituationColor(situation) {
+      if (situation === 'trapped') return '#dc2626';
+      if (situation === 'injured') return '#d97706';
+      if (situation === 'safe') return '#15803d';
+      return '#9ca3af';
+    }
+
+    function sendReadyMessage() {
+      var msg = JSON.stringify({ type: 'ready' });
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(msg);
+      } else {
+        window.parent.postMessage(msg, '*');
+      }
+    }
+
+    map.whenReady(function() {
+      sendReadyMessage();
+    });
+
+    var hasCentered = false;
+
+    function updateMap(data) {
+      if (data.userLat && data.userLng) {
+        var userLatLng = [data.userLat, data.userLng];
+        rescuerMarker.setLatLng(userLatLng);
+        if (typeof rangeCircle !== 'undefined' && rangeCircle) {
+          rangeCircle.setLatLng(userLatLng);
+        }
+        if (data.isNavigating || !hasCentered) {
+          map.setView(userLatLng, map.getZoom());
+          hasCentered = true;
+        }
+      }
+
+      if (data.victims) {
+        currentVictims = data.victims;
+        var newIds = data.victims.map(function(v) { return v.id; });
+        for (var id in victimMarkers) {
+          if (newIds.indexOf(id) === -1) {
+            map.removeLayer(victimMarkers[id]);
+            delete victimMarkers[id];
+          }
+        }
+
+        data.victims.forEach(function(v) {
+          var color = getSituationColor(v.situation);
+          var borderStyle = v.isSelected ? 'border: 3.5px solid #000000; scale: 1.25;' : 'border: 2px solid #ffffff;';
+          
+          var victimIcon = L.divIcon({
+            className: 'victim-icon-' + v.id,
+            html: '<div class="custom-pin" style="background-color: ' + color + '; ' + borderStyle + '">' + v.idx + '</div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+
+          if (victimMarkers[v.id]) {
+            victimMarkers[v.id].setLatLng([v.lat, v.lng]);
+            victimMarkers[v.id].setIcon(victimIcon);
+            victimMarkers[v.id].setPopupContent("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+          } else {
+            var marker = L.marker([v.lat, v.lng], { icon: victimIcon }).addTo(map);
+            marker.bindPopup("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+            
+            marker.on('click', function() {
+              var msg = JSON.stringify({ type: 'selectVictim', id: v.id });
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(msg);
+              } else {
+                window.parent.postMessage(msg, '*');
+              }
+            });
+
+            victimMarkers[v.id] = marker;
+          }
+
+          if (v.isSelected) {
+            victimMarkers[v.id].openPopup();
+          }
+        });
+      }
+
+      if (pathLine) {
+        map.removeLayer(pathLine);
+        pathLine = null;
+      }
+
+      var activeVictim = currentVictims.find(function(v) { return v.isSelected; });
+      if (activeVictim && data.userLat && data.userLng) {
+        pathLine = L.polyline([
+          [data.userLat, data.userLng],
+          [activeVictim.lat, activeVictim.lng]
+        ], {
+          color: '#dc2626',
+          weight: 3.5,
+          dashArray: '6, 8',
+          opacity: 0.85
+        }).addTo(map);
+      }
+    }
+
+    function handleWindowMessage(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (data.type === 'update') {
+          updateMap(data);
+        }
+      } catch (err) {}
+    }
+
+    document.addEventListener('message', handleWindowMessage);
+    window.addEventListener('message', handleWindowMessage);
+  </script>
+</body>
+</html>
+`;
 
 export function MapView({
   victims,
@@ -38,6 +272,142 @@ export function MapView({
   const gridCells = 12;
   const [mapLayout, setMapLayout] = useState({ width: 0, height: 0 });
   const [showSosModal, setShowSosModal] = useState(false);
+
+  // Rescuer node blinking animation
+  const rescuerScale = useRef(new Animated.Value(1)).current;
+  const rescuerOpacity = useRef(new Animated.Value(0.8)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(rescuerScale, {
+            toValue: 2.2,
+            duration: 1200,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.timing(rescuerScale, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(rescuerOpacity, {
+            toValue: 0,
+            duration: 1200,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.timing(rescuerOpacity, {
+            toValue: 0.8,
+            duration: 0,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ]),
+      ])
+    ).start();
+  }, [rescuerScale, rescuerOpacity]);
+
+  // Leaflet Map Settings & Refs
+  const [mapType, setMapType] = useState<'leaflet' | 'indoor'>('leaflet');
+  const [mapReady, setMapReady] = useState(false);
+  const webViewRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const TUMAGA_LAT = 6.9394;
+  const TUMAGA_LNG = 122.0796;
+
+  const convertToGps = (x: number, y: number) => {
+    // Barangay Tumaga is centered around (x=50, y=50)
+    // 1% roughly maps to 0.00015 degrees latitude/longitude (approx 16 meters)
+    const lng = TUMAGA_LNG + (x - 50) * 0.00015;
+    const lat = TUMAGA_LAT - (y - 50) * 0.00015;
+    return { lat, lng };
+  };
+
+  const userGps = convertToGps(userPos.x, userPos.y);
+
+  const victimGpsList = victims.map((v, idx) => {
+    const coords = VICTIM_COORDS[v.id] || { x: 50, y: 50 };
+    const gps = convertToGps(coords.x, coords.y);
+    return {
+      id: v.id,
+      label: v.label,
+      idx: idx + 1,
+      lat: gps.lat,
+      lng: gps.lng,
+      situation: v.situation,
+      floor: v.floor,
+      isSelected: selectedVictim === v.id,
+    };
+  });
+
+  const sendMapUpdate = () => {
+    const data = {
+      type: 'update',
+      userLat: userGps.lat,
+      userLng: userGps.lng,
+      isNavigating: isNavigating,
+      victims: victimGpsList,
+    };
+
+    const dataStr = JSON.stringify(data);
+
+    if (Platform.OS === 'web') {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(dataStr, '*');
+      }
+    } else {
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(dataStr);
+      }
+    }
+  };
+
+  // Sync data to map once ready, or when values update
+  useEffect(() => {
+    if (mapReady) {
+      sendMapUpdate();
+    }
+  }, [mapReady, userPos.x, userPos.y, isNavigating, victims, selectedVictim]);
+
+  // Reset ready state when mapType changes to force a fresh hand-shake
+  useEffect(() => {
+    setMapReady(false);
+  }, [mapType]);
+
+  // Web iframe message listener
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleWebMessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'ready') {
+            setMapReady(true);
+          } else if (data.type === 'selectVictim') {
+            onSelectVictim(data.id);
+          }
+        } catch (err) {
+          // Ignore non-JSON messages
+        }
+      };
+      window.addEventListener('message', handleWebMessage);
+      return () => window.removeEventListener('message', handleWebMessage);
+    }
+  }, [onSelectVictim]);
+
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'ready') {
+        setMapReady(true);
+      } else if (data.type === 'selectVictim') {
+        onSelectVictim(data.id);
+      }
+    } catch (err) {
+      console.warn("Error parsing WebView message:", err);
+    }
+  };
 
   const handleMapLayout = (e: any) => {
     const { width, height } = e.nativeEvent.layout;
@@ -76,172 +446,242 @@ export function MapView({
       <View style={styles.mapCard}>
         <View style={styles.mapHeader}>
           <View style={styles.row}>
-            <Layers size={14} color="#000000" />
-            <Text style={styles.mapHeaderText}>Offline Map — Zone 4–7</Text>
+            {mapType === 'leaflet' ? (
+              <MapPin size={14} color="#dc2626" style={{ marginRight: 6 }} />
+            ) : (
+              <Layers size={14} color="#000000" style={{ marginRight: 6 }} />
+            )}
+            <Text style={styles.mapHeaderText}>
+              {mapType === 'leaflet' ? 'GPS Online Map' : `Offline Map — Floor ${selectedFloor}`}
+            </Text>
           </View>
-          <View style={styles.row}>
-            <View style={styles.mapDotIndicator} />
-            <Mono style={styles.mapHeaderStatusText}>CACHED</Mono>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Toggle Switch */}
+            <View style={localStyles.toggleContainer}>
+              <TouchableOpacity
+                onPress={() => setMapType('leaflet')}
+                style={[localStyles.toggleButton, mapType === 'leaflet' && localStyles.toggleButtonActive]}
+              >
+                <Text style={[localStyles.toggleText, mapType === 'leaflet' && localStyles.toggleTextActive]}>
+                  GPS
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setMapType('indoor')}
+                style={[localStyles.toggleButton, mapType === 'indoor' && localStyles.toggleButtonActive]}
+              >
+                <Text style={[localStyles.toggleText, mapType === 'indoor' && localStyles.toggleTextActive]}>
+                  Indoor
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.row}>
+              <View style={[styles.mapDotIndicator, { backgroundColor: mapType === 'leaflet' ? '#22c55e' : '#f59e0b' }]} />
+              <Mono style={styles.mapHeaderStatusText}>
+                {mapType === 'leaflet' ? 'ONLINE' : 'CACHED'}
+              </Mono>
+            </View>
           </View>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={isNavigating ? 1 : 0.9}
-          onPress={handleMapPress}
-          onLayout={handleMapLayout}
-          style={styles.mapBody}
-        >
-          {mapLayout.width > 0 && mapLayout.height > 0 && (
-            <Svg width={mapLayout.width} height={mapLayout.height} style={StyleSheet.absoluteFill}>
-              {Array.from({ length: gridCells }).map((_, i) => (
-                <G key={i}>
-                  <Line
-                    x1={`${(i / gridCells) * 100}%`}
-                    y1="0"
-                    x2={`${(i / gridCells) * 100}%`}
-                    y2="100%"
-                    stroke="rgba(0,0,0,0.04)"
-                    strokeWidth="1"
-                  />
-                  <Line
-                    x1="0"
-                    y1={`${(i / gridCells) * 100}%`}
-                    x2="100%"
-                    y2={`${(i / gridCells) * 100}%`}
-                    stroke="rgba(0,0,0,0.04)"
-                    strokeWidth="1"
-                  />
-                </G>
-              ))}
-
-              <Rect x="12%" y="10%" width="76%" height="80%" rx="4" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="2" />
-              <Rect x="12%" y="10%" width="35%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
-              <Rect x="53%" y="10%" width="35%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
-              <Rect x="12%" y="52%" width="76%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
-              <Line x1="47%" y1="10%" x2="47%" y2="90%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
-              <Line x1="12%" y1="48%" x2="88%" y2="48%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
-
-              {targetCoords && selectedV && selectedV.floor === (selectedFloor === "G" ? 0 : Number(selectedFloor)) && (
-                <Line
-                  x1={`${userPos.x}%`}
-                  y1={`${userPos.y}%`}
-                  x2={`${targetCoords.x}%`}
-                  y2={`${targetCoords.y}%`}
-                  stroke="#dc2626"
-                  strokeWidth="2.5"
-                  strokeDasharray="6,4"
-                  strokeDashoffset={dashOffset}
-                />
-              )}
-            </Svg>
-          )}
-
-          <View
-            style={[
-              styles.userIconContainer,
-              {
-                left: `${userPos.x}%`,
-                top: `${userPos.y}%`,
-              }
-            ]}
+        {mapType === 'indoor' ? (
+          <TouchableOpacity
+            activeOpacity={isNavigating ? 1 : 0.9}
+            onPress={handleMapPress}
+            onLayout={handleMapLayout}
+            style={styles.mapBody}
           >
-            <View style={styles.userIconWrapper}>
-              <View
-                style={
-                  rescuerEmergency === "trapped"
-                    ? styles.userIconPingTrapped
-                    : rescuerEmergency === "injured"
-                    ? styles.userIconPingInjured
-                    : styles.userIconPing
-                }
-              />
-              <View
-                style={
-                  rescuerEmergency === "trapped"
-                    ? styles.userIconPulseTrapped
-                    : rescuerEmergency === "injured"
-                    ? styles.userIconPulseInjured
-                    : styles.userIconPulse
-                }
-              />
-              <View
-                style={
-                  rescuerEmergency === "trapped"
-                    ? styles.userIconCenterTrapped
-                    : rescuerEmergency === "injured"
-                    ? styles.userIconCenterInjured
-                    : styles.userIconCenter
-                }
-              >
-                {rescuerEmergency ? (
-                  <AlertTriangle size={8} color="#ffffff" />
-                ) : (
-                  <Navigation size={8} color="#ffffff" fill="#ffffff" style={{ transform: [{ rotate: '45deg' }] }} />
+            {mapLayout.width > 0 && mapLayout.height > 0 && (
+              <Svg width={mapLayout.width} height={mapLayout.height} style={StyleSheet.absoluteFill}>
+                {Array.from({ length: gridCells }).map((_, i) => (
+                  <G key={i}>
+                    <Line
+                      x1={`${(i / gridCells) * 100}%`}
+                      y1="0"
+                      x2={`${(i / gridCells) * 100}%`}
+                      y2="100%"
+                      stroke="rgba(0,0,0,0.04)"
+                      strokeWidth="1"
+                    />
+                    <Line
+                      x1="0"
+                      y1={`${(i / gridCells) * 100}%`}
+                      x2="100%"
+                      y2={`${(i / gridCells) * 100}%`}
+                      stroke="rgba(0,0,0,0.04)"
+                      strokeWidth="1"
+                    />
+                  </G>
+                ))}
+
+                <Rect x="12%" y="10%" width="76%" height="80%" rx="4" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="2" />
+                <Rect x="12%" y="10%" width="35%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
+                <Rect x="53%" y="10%" width="35%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
+                <Rect x="12%" y="52%" width="76%" height="38%" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
+                <Line x1="47%" y1="10%" x2="47%" y2="90%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
+                <Line x1="12%" y1="48%" x2="88%" y2="48%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
+
+                {targetCoords && selectedV && selectedV.floor === (selectedFloor === "G" ? 0 : Number(selectedFloor)) && (
+                  <Line
+                    x1={`${userPos.x}%`}
+                    y1={`${userPos.y}%`}
+                    x2={`${targetCoords.x}%`}
+                    y2={`${targetCoords.y}%`}
+                    stroke="#dc2626"
+                    strokeWidth="2.5"
+                    strokeDasharray="6,4"
+                    strokeDashoffset={dashOffset}
+                  />
                 )}
+              </Svg>
+            )}
+
+            <View
+              style={[
+                styles.userIconContainer,
+                {
+                  left: `${userPos.x}%`,
+                  top: `${userPos.y}%`,
+                }
+              ]}
+            >
+              <View style={styles.userIconWrapper}>
+                <Animated.View
+                  style={[
+                    rescuerEmergency === "trapped"
+                      ? styles.userIconPingTrapped
+                      : rescuerEmergency === "injured"
+                      ? styles.userIconPingInjured
+                      : styles.userIconPing,
+                    {
+                      transform: [{ scale: rescuerScale }],
+                      opacity: rescuerOpacity,
+                    }
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    rescuerEmergency === "trapped"
+                      ? styles.userIconPulseTrapped
+                      : rescuerEmergency === "injured"
+                      ? styles.userIconPulseInjured
+                      : styles.userIconPulse,
+                    {
+                      transform: [{ scale: Animated.multiply(rescuerScale, 0.7) }],
+                      opacity: rescuerOpacity,
+                    }
+                  ]}
+                />
+                <View
+                  style={
+                    rescuerEmergency === "trapped"
+                      ? styles.userIconCenterTrapped
+                      : rescuerEmergency === "injured"
+                      ? styles.userIconCenterInjured
+                      : styles.userIconCenter
+                  }
+                >
+                  {rescuerEmergency && (
+                    <AlertTriangle size={8} color="#ffffff" />
+                  )}
+                </View>
               </View>
             </View>
-          </View>
 
-          {victims.map((v, idx) => {
-            const coords = VICTIM_COORDS[v.id] || { x: 50, y: 50 };
-            const isSelected = selectedVictim === v.id;
+            {victims.map((v, idx) => {
+              const coords = VICTIM_COORDS[v.id] || { x: 50, y: 50 };
+              const isSelected = selectedVictim === v.id;
 
-            const victimFloorStr = v.floor === 0 ? "G" : String(v.floor);
-            if (victimFloorStr !== selectedFloor) return null;
+              const victimFloorStr = v.floor === 0 ? "G" : String(v.floor);
+              if (victimFloorStr !== selectedFloor) return null;
 
-            const dotColor =
-              v.situation === "trapped" ? "#dc2626" :
-              v.situation === "injured" ? "#d97706" :
-              v.situation === "safe" ? "#15803d" :
-              "#9ca3af";
+              const dotColor =
+                v.situation === "trapped" ? "#dc2626" :
+                v.situation === "injured" ? "#d97706" :
+                v.situation === "safe" ? "#15803d" :
+                "#9ca3af";
 
-            return (
-              <TouchableOpacity
-                key={v.id}
-                onPress={() => onSelectVictim(v.id)}
-                style={[
-                  styles.mapVictimContainer,
-                  {
-                    left: `${coords.x}%`,
-                    top: `${coords.y}%`,
-                    zIndex: isSelected ? 30 : 10,
-                  }
-                ]}
-              >
-                <View
+              return (
+                <TouchableOpacity
+                  key={v.id}
+                  onPress={() => onSelectVictim(v.id)}
                   style={[
-                    styles.mapVictimDot,
+                    styles.mapVictimContainer,
                     {
-                      backgroundColor: dotColor,
-                      borderWidth: isSelected ? 2.5 : 2,
-                      borderColor: '#ffffff',
+                      left: `${coords.x}%`,
+                      top: `${coords.y}%`,
+                      zIndex: isSelected ? 30 : 10,
                     }
                   ]}
                 >
-                  <Text style={styles.mapVictimText}>{idx + 1}</Text>
-                </View>
-                <View style={[styles.mapVictimStem, { backgroundColor: dotColor }]} />
-              </TouchableOpacity>
-            );
-          })}
+                  <View
+                    style={[
+                      styles.mapVictimDot,
+                      {
+                        backgroundColor: dotColor,
+                        borderWidth: isSelected ? 2.5 : 2,
+                        borderColor: '#ffffff',
+                      }
+                    ]}
+                  >
+                    <Text style={styles.mapVictimText}>{idx + 1}</Text>
+                  </View>
+                  <View style={[styles.mapVictimStem, { backgroundColor: dotColor }]} />
+                </TouchableOpacity>
+              );
+            })}
 
-          <TouchableOpacity
-            onPress={() => setShowSosModal(true)}
-            style={styles.mapSosHud}
-          >
-            <LifeBuoy size={16} color="#ffffff" />
-            <Text style={styles.mapSosHudText}>SOS</Text>
+            <TouchableOpacity
+              onPress={() => setShowSosModal(true)}
+              style={styles.mapSosHud}
+            >
+              <LifeBuoy size={16} color="#ffffff" />
+              <Text style={styles.mapSosHudText}>SOS</Text>
+            </TouchableOpacity>
+
+            <View style={styles.mapCompassHud}>
+              <Mono style={styles.mapCompassText}>N</Mono>
+            </View>
+
+            <View style={styles.mapScaleHud}>
+              <View style={styles.mapScaleBar} />
+              <Mono style={styles.mapScaleText}>20 m</Mono>
+            </View>
           </TouchableOpacity>
+        ) : (
+          <View style={[styles.mapBody, { overflow: 'hidden' }]}>
+            {Platform.OS === 'web' ? (
+              <iframe
+                ref={iframeRef as any}
+                srcDoc={LEAFLET_HTML}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            ) : (
+              <WebView
+                ref={webViewRef}
+                originWhitelist={['*']}
+                source={{ html: LEAFLET_HTML }}
+                style={{ flex: 1, backgroundColor: '#f3f4f6' }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                onMessage={handleWebViewMessage}
+              />
+            )}
 
-          <View style={styles.mapCompassHud}>
-            <Mono style={styles.mapCompassText}>N</Mono>
-          </View>
+            {/* Overlaid HUD HUD elements on Leaflet */}
+            <TouchableOpacity
+              onPress={() => setShowSosModal(true)}
+              style={styles.mapSosHud}
+            >
+              <LifeBuoy size={16} color="#ffffff" />
+              <Text style={styles.mapSosHudText}>SOS</Text>
+            </TouchableOpacity>
 
-          <View style={styles.mapScaleHud}>
-            <View style={styles.mapScaleBar} />
-            <Mono style={styles.mapScaleText}>20 m</Mono>
+            <View style={styles.mapCompassHud}>
+              <Mono style={styles.mapCompassText}>N</Mono>
+            </View>
           </View>
-        </TouchableOpacity>
+        )}
 
         <View style={styles.legendContainer}>
           <View style={styles.legendItem}>
@@ -452,4 +892,32 @@ export function MapView({
   );
 }
 
-// ── Pods View ──────────────────────────────────────────────────────────────
+const localStyles = StyleSheet.create({
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 8,
+    padding: 2,
+  },
+  toggleButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  toggleText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    color: '#4b5563',
+  },
+  toggleTextActive: {
+    color: '#111827',
+  },
+});

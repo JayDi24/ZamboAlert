@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable, ActivityIndicator,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
@@ -357,9 +357,10 @@ export default function LoginScreen({ navigation }) {
 function Header() {
   return (
     <View style={styles.logoRow}>
-      <View style={styles.logoChip}>
-        <Ionicons name="play" size={18} color={colors.textOnPrimary} />
-      </View>
+      <Image
+        source={require('../../assets/zamboalert.png')}
+        style={styles.logoImage}
+      />
       <Text style={typography.appTitle}>ZamboAlert</Text>
     </View>
   );
@@ -424,6 +425,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, padding: 24, paddingTop: 12 },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
   logoChip: { width: 32, height: 32, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  logoImage: { width: 32, height: 32, resizeMode: 'contain' },
   heading: { fontFamily: 'Inter_700Bold', fontSize: 26, color: colors.textPrimary },
   sub: { marginTop: 4, marginBottom: 28, lineHeight: 19, fontFamily: 'Inter_400Regular', fontSize: 13 },
   fieldLabel: { marginBottom: 8 },
