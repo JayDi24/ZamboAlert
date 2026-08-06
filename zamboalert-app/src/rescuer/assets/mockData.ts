@@ -1,8 +1,8 @@
 export const VICTIMS = [
-  { id: "V-001", label: "VICTIM-01", distance: 14.2, bearing: 342, floor: -1, signalStrength: 87, situation: "safe", lastPing: "0:03 ago" },
-  { id: "V-002", label: "VICTIM-02", distance: 31.7, bearing: 58,  floor: -1, signalStrength: 61, situation: "trapped",   lastPing: "0:11 ago" },
-  { id: "V-003", label: "VICTIM-03", distance: 52.4, bearing: 195, floor: 0,  signalStrength: 44, situation: "lost or unable to move", lastPing: "1:42 ago" },
-  { id: "V-004", label: "VICTIM-04", distance: 22.8, bearing: 120, floor: 1,  signalStrength: 75, situation: "injured", lastPing: "0:25 ago" },
+  { id: "V-001", label: "VICTIM-01", distance: 14.2, bearing: 342, floor: -1, signalStrength: 87, situation: "safe", lastPing: "0:03 ago", disasterType: "Flood" },
+  { id: "V-002", label: "VICTIM-02", distance: 31.7, bearing: 58,  floor: -1, signalStrength: 61, situation: "trapped",   lastPing: "0:11 ago", disasterType: "Landslide" },
+  { id: "V-003", label: "VICTIM-03", distance: 52.4, bearing: 195, floor: 0,  signalStrength: 44, situation: "lost or unable to move", lastPing: "1:42 ago", disasterType: "Earthquake" },
+  { id: "V-004", label: "VICTIM-04", distance: 22.8, bearing: 120, floor: 1,  signalStrength: 75, situation: "injured", lastPing: "0:25 ago", disasterType: "Fire" },
 ];
 
 export const VICTIM_COORDS: Record<string, { x: number; y: number }> = {

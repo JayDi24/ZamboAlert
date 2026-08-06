@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, Animated } from 'react-native';
 import { WebView } from 'react-native-webview';
-import Svg, { Circle, Line, Rect, G } from 'react-native-svg';
+import Svg, { Circle, Line, Rect, G, Text as SvgText } from 'react-native-svg';
 import { Navigation, ShieldAlert, ChevronRight, MapPin, X, Layers, LifeBuoy, AlertTriangle } from 'lucide-react-native';
 import { Mono, PulsingDot } from './SharedUI';
 import { VICTIM_COORDS, situationColors } from '../assets/mockData';
@@ -81,6 +81,16 @@ const LEAFLET_HTML = `
       animation: pulse-circle 2.5s infinite ease-in-out;
       filter: drop-shadow(0 0 4px #2563eb);
     }
+    .disaster-zone-tooltip {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      color: #374151;
+      font-weight: bold;
+      font-size: 10px;
+      text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff, 0 0 3px #ffffff;
+      padding: 0;
+    }
   </style>
 </head>
 <body>
@@ -113,11 +123,36 @@ const LEAFLET_HTML = `
       radius: 1000,
       color: '#2563eb',
       fillColor: '#2563eb',
-      fillOpacity: 0.1,
+      fillOpacity: 0.05,
       weight: 1.5,
       dashArray: '5, 5',
       className: 'glowing-web'
     }).addTo(map);
+
+    function convertToGps(x, y) {
+      return [
+        6.9394 - (y - 50) * 0.00015,
+        122.0796 + (x - 50) * 0.00015
+      ];
+    }
+
+    var zones = [
+      { name: "🌊 Flood Zone", coords: convertToGps(30, 25), radius: 120, color: "#2563eb", fillOpacity: 0.12 },
+      { name: "🪨 Landslide Zone", coords: convertToGps(68, 20), radius: 100, color: "#d97706", fillOpacity: 0.12 },
+      { name: "🏢 Earthquake Area", coords: convertToGps(60, 72), radius: 130, color: "#4b5563", fillOpacity: 0.12 },
+      { name: "🔥 Active Fire Area", coords: convertToGps(45, 40), radius: 90, color: "#ef4444", fillOpacity: 0.12 }
+    ];
+
+    zones.forEach(function(zone) {
+      L.circle(zone.coords, {
+        radius: zone.radius,
+        color: zone.color,
+        fillColor: zone.color,
+        fillOpacity: zone.fillOpacity,
+        weight: 1.5,
+        dashArray: '4, 4'
+      }).bindTooltip(zone.name, { permanent: true, direction: 'top', className: 'disaster-zone-tooltip', opacity: 0.8 }).addTo(map);
+    });
 
     var victimMarkers = {};
     var currentVictims = [];
@@ -128,6 +163,16 @@ const LEAFLET_HTML = `
       if (situation === 'injured') return '#d97706';
       if (situation === 'safe') return '#15803d';
       return '#9ca3af';
+    }
+
+    function getDisasterEmoji(disaster) {
+      if (!disaster) return '';
+      var d = disaster.toLowerCase();
+      if (d === 'flood') return '🌊';
+      if (d === 'landslide') return '🪨';
+      if (d === 'earthquake') return '🏢';
+      if (d === 'fire') return '🔥';
+      return '⚠️';
     }
 
     function sendReadyMessage() {
@@ -172,9 +217,12 @@ const LEAFLET_HTML = `
           var color = getSituationColor(v.situation);
           var borderStyle = v.isSelected ? 'border: 3.5px solid #000000; scale: 1.25;' : 'border: 2px solid #ffffff;';
           
+          var disasterEmoji = getDisasterEmoji(v.disasterType);
+          var badgeHtml = disasterEmoji ? '<span style="position: absolute; top: -10px; right: -10px; background: white; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 1000;">' + disasterEmoji + '</span>' : '';
+
           var victimIcon = L.divIcon({
             className: 'victim-icon-' + v.id,
-            html: '<div class="custom-pin" style="background-color: ' + color + '; ' + borderStyle + '">' + v.idx + '</div>',
+            html: '<div class="custom-pin" style="background-color: ' + color + '; ' + borderStyle + '">' + v.idx + badgeHtml + '</div>',
             iconSize: [24, 24],
             iconAnchor: [12, 12]
           });
@@ -182,10 +230,10 @@ const LEAFLET_HTML = `
           if (victimMarkers[v.id]) {
             victimMarkers[v.id].setLatLng([v.lat, v.lng]);
             victimMarkers[v.id].setIcon(victimIcon);
-            victimMarkers[v.id].setPopupContent("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+            victimMarkers[v.id].setPopupContent("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
           } else {
             var marker = L.marker([v.lat, v.lng], { icon: victimIcon }).addTo(map);
-            marker.bindPopup("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+            marker.bindPopup("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
             
             marker.on('click', function() {
               var msg = JSON.stringify({ type: 'selectVictim', id: v.id });
@@ -339,6 +387,7 @@ export function MapView({
       situation: v.situation,
       floor: v.floor,
       isSelected: selectedVictim === v.id,
+      disasterType: v.disasterType,
     };
   });
 
@@ -521,6 +570,19 @@ export function MapView({
                 <Line x1="47%" y1="10%" x2="47%" y2="90%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
                 <Line x1="12%" y1="48%" x2="88%" y2="48%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
 
+                {/* Shaded Natural Disaster Areas */}
+                <Circle cx="30%" cy="25%" r="35" fill="rgba(37, 99, 235, 0.07)" stroke="#2563eb" strokeWidth="1" strokeDasharray="3,3" />
+                <SvgText x="30%" y="27%" fontSize="7" fontWeight="bold" fill="#2563eb" opacity={0.6} textAnchor="middle">FLOOD</SvgText>
+
+                <Circle cx="68%" cy="20%" r="30" fill="rgba(217, 119, 6, 0.07)" stroke="#d97706" strokeWidth="1" strokeDasharray="3,3" />
+                <SvgText x="68%" y="22%" fontSize="7" fontWeight="bold" fill="#d97706" opacity={0.6} textAnchor="middle">LANDSLIDE</SvgText>
+
+                <Circle cx="60%" cy="72%" r="40" fill="rgba(75, 85, 99, 0.07)" stroke="#4b5563" strokeWidth="1" strokeDasharray="3,3" />
+                <SvgText x="60%" y="74%" fontSize="7" fontWeight="bold" fill="#4b5563" opacity={0.6} textAnchor="middle">QUAKE</SvgText>
+
+                <Circle cx="45%" cy="40%" r="28" fill="rgba(239, 68, 68, 0.07)" stroke="#ef4444" strokeWidth="1" strokeDasharray="3,3" />
+                <SvgText x="45%" y="42%" fontSize="7" fontWeight="bold" fill="#ef4444" opacity={0.6} textAnchor="middle">FIRE</SvgText>
+
                 {targetCoords && selectedV && selectedV.floor === (selectedFloor === "G" ? 0 : Number(selectedFloor)) && (
                   <Line
                     x1={`${userPos.x}%`}
@@ -601,6 +663,13 @@ export function MapView({
                 v.situation === "safe" ? "#15803d" :
                 "#9ca3af";
 
+              const disasterEmoji =
+                v.disasterType?.toLowerCase() === "flood" ? "🌊" :
+                v.disasterType?.toLowerCase() === "landslide" ? "🪨" :
+                v.disasterType?.toLowerCase() === "earthquake" ? "🏢" :
+                v.disasterType?.toLowerCase() === "fire" ? "🔥" :
+                "⚠️";
+
               return (
                 <TouchableOpacity
                   key={v.id}
@@ -625,6 +694,26 @@ export function MapView({
                     ]}
                   >
                     <Text style={styles.mapVictimText}>{idx + 1}</Text>
+                    {v.disasterType && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        backgroundColor: '#ffffff',
+                        borderRadius: 6,
+                        width: 13,
+                        height: 13,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 1,
+                        elevation: 2,
+                      }}>
+                        <Text style={{ fontSize: 8 }}>{disasterEmoji}</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={[styles.mapVictimStem, { backgroundColor: dotColor }]} />
                 </TouchableOpacity>
@@ -705,6 +794,24 @@ export function MapView({
             <Mono style={styles.legendText}>Safe</Mono>
           </View>
         </View>
+
+        <View style={[styles.legendContainer, { borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)", paddingTop: 8 }]}>
+          <View style={styles.legendItem}>
+            <Mono style={styles.legendText}>Zones:</Mono>
+          </View>
+          <View style={styles.legendItem}>
+            <Mono style={styles.legendText}>🌊 Flood</Mono>
+          </View>
+          <View style={styles.legendItem}>
+            <Mono style={styles.legendText}>🪨 Landslide</Mono>
+          </View>
+          <View style={styles.legendItem}>
+            <Mono style={styles.legendText}>🏢 Quake</Mono>
+          </View>
+          <View style={styles.legendItem}>
+            <Mono style={styles.legendText}>🔥 Fire</Mono>
+          </View>
+        </View>
       </View>
 
       {selectedV && (
@@ -730,6 +837,11 @@ export function MapView({
               <Text style={styles.navStatusText}>
                 Situation: <Text style={(selectedV.situation === 'trapped' || selectedV.situation === 'injured') ? styles.textRedBold : styles.textBlackBold}>{selectedV.situation.toUpperCase()}</Text>
               </Text>
+              {selectedV.disasterType && (
+                <Text style={[styles.navStatusText, { marginTop: 2 }]}>
+                  Disaster: <Text style={{ fontWeight: 'bold', color: '#dc2626' }}>{selectedV.disasterType.toUpperCase()}</Text>
+                </Text>
+              )}
             </View>
             <View style={styles.alignRight}>
               <Mono style={styles.navDistanceText}>{selectedV.distance.toFixed(1)}m</Mono>

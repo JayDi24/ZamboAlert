@@ -1,6 +1,7 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { API_BASE_URL } from '../config';
 
 // ── Pure JS SHA-256 Implementation ──────────────────────────────────────────
 function sha256(ascii: string): string {
@@ -158,7 +159,7 @@ type AuthContextType = {
   devCode: string | null;
 
   login: (email: string, password: string, role: string) => Promise<void>;
-  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string) => Promise<boolean>;
+  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string, idFrontUri?: string, idBackUri?: string) => Promise<boolean>;
   logout: () => void;
   updateUser: (updates: Partial<Pick<UserRecord, 'mfaEnabled' | 'mfaSecret'>>) => void;
 
@@ -262,59 +263,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      await delay(700);
-      const found = findUserByEmail(email);
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role })
+      });
 
-      if (!found) {
-        setError('Incorrect email or password. Please try again.');
-        return;
-      }
-      if (found.role !== role) {
-        setError(`This account is registered as a ${found.role}, not a ${role}.`);
-        return;
-      }
-      if (found.role === 'rescuer' && found.isRescuerVerified === false) {
-        setError('Your rescuer account is pending verification by the admin dashboard.');
-        return;
-      }
-      clearLockoutIfNeeded(found);
-      if (found.lockoutUntil && found.lockoutUntil > Date.now()) {
-        const secondsLeft = Math.ceil((found.lockoutUntil - Date.now()) / 1000);
-        setError(`Account locked due to too many failed attempts. Try again in ${secondsLeft}s.`);
-        return;
-      }
-      if (found.passwordHash !== sha256(password)) {
-        found.failedAttempts = (found.failedAttempts || 0) + 1;
-        if (found.failedAttempts >= MAX_FAILED_ATTEMPTS) {
-          found.lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
-          setError(`Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MS / 1000} seconds.`);
-        } else {
-          setError(`Incorrect email or password. ${MAX_FAILED_ATTEMPTS - found.failedAttempts} attempt(s) remaining.`);
-        }
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'Login failed.');
         return;
       }
 
-      found.failedAttempts = 0;
-      found.lockoutUntil = undefined;
-
-      if (!found.isVerified) {
-        found.emailVerificationCode = generateCode();
-        setDevCode(found.emailVerificationCode);
-        setPendingEmail(found.email);
+      const data = await response.json();
+      if (data.requiresVerification) {
+        setPendingEmail(data.email);
+        setDevCode(data.devCode);
         setAuthStep('verify_email');
         return;
       }
 
-      if (found.mfaEnabled) {
-        setPendingEmail(found.email);
-        setAuthStep('mfa');
-        return;
-      }
-
-      setUser(toPublicUser(found));
-      setSession(createSession(found));
+      setUser(data.user);
+      setSession(data.session);
     } catch (e) {
-      setError('Something went wrong. Please try again.');
+      setError('Connection error. Is the backend running?');
     } finally {
       setLoading(false);
     }
@@ -324,47 +296,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      await delay(500);
-      const found = findUserByEmail(pendingEmail);
-      if (!found) {
-        setError('Something went wrong. Please try again.');
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail, code })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'Verification failed. Please try again.');
         return false;
       }
-      if (!code.trim() || !found.emailVerificationCode || code.trim() !== found.emailVerificationCode) {
-        setError('Incorrect verification code. Please try again.');
-        return false;
-      }
-      found.isVerified = true;
-      found.emailVerificationCode = undefined;
+
+      const data = await response.json();
       setDevCode(null);
 
-      if (found.role === 'rescuer' && found.isRescuerVerified === false) {
+      if (data.isRescuerVerified === false) {
         setError('Email verified. Your account is pending admin verification before you can log in.');
         setAuthStep('login');
         setPendingEmail('');
         return true;
       }
 
-      if (found.mfaEnabled) {
-        setAuthStep('mfa');
-        return true;
+      if (data.user && data.session) {
+        setUser(data.user);
+        setSession(data.session);
       }
-
-      setUser(toPublicUser(found));
-      setSession(createSession(found));
       setAuthStep('login');
       setPendingEmail('');
       return true;
+    } catch (e) {
+      setError('Connection error. Is the backend running?');
+      return false;
     } finally {
       setLoading(false);
     }
   }
 
-  function resendVerificationCode() {
-    const found = findUserByEmail(pendingEmail);
-    if (!found) return;
-    found.emailVerificationCode = generateCode();
-    setDevCode(found.emailVerificationCode);
+  async function resendVerificationCode() {
+    if (!pendingEmail) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/resend-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDevCode(data.devCode);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   async function verifyMfaCode(code: string): Promise<boolean> {
@@ -376,14 +359,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError('Please enter the 6-digit code from your authenticator.');
         return false;
       }
-      const found = findUserByEmail(pendingEmail);
-      if (!found) {
-        setError('Something went wrong. Please try again.');
-        return false;
+      // Fallback local support for MFA demo step
+      const found = SESSION_USERS.find(u => u.email.toLowerCase() === pendingEmail.toLowerCase());
+      if (found) {
+        setUser(toPublicUser(found));
+        setSession(createSession(found));
       }
-      // Offline demo: any 6-digit code is accepted since there's no live TOTP backend.
-      setUser(toPublicUser(found));
-      setSession(createSession(found));
       setAuthStep('login');
       setPendingEmail('');
       setDevCode(null);
@@ -401,47 +382,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: string,
     contactNumber: string,
     idType?: string,
-    idNumber?: string
+    idNumber?: string,
+    idFrontUri?: string,
+    idBackUri?: string
   ): Promise<boolean> {
     setLoading(true);
     setError('');
     try {
-      await delay(900);
-      if (findUserByEmail(email)) {
-        setError('An account with this email already exists. Try logging in.');
-        return false;
-      }
       const policy = checkPasswordPolicy(password);
       if (policy.score < MIN_PASSWORD_SCORE) {
         setError('Password is too weak. Meet at least 4 of the 5 requirements.');
         return false;
       }
 
-      const newUser: UserRecord = {
-        id: String(Date.now()),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim().toLowerCase(),
-        passwordHash: sha256(password),
-        role: role as Role,
-        failedAttempts: 0,
-        isVerified: false,
-        mfaEnabled: false,
-        mfaSecret: '',
-        contactNumber: contactNumber.trim(),
-        idType: role === 'rescuer' ? idType : undefined,
-        idNumber: role === 'rescuer' ? idNumber : undefined,
-        isRescuerVerified: role === 'rescuer' ? false : undefined,
-      };
-      newUser.emailVerificationCode = generateCode();
-      SESSION_USERS.push(newUser);
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          password,
+          role,
+          contactNumber,
+          idType,
+          idNumber,
+          idFrontUri,
+          idBackUri
+        })
+      });
 
-      setDevCode(newUser.emailVerificationCode);
-      setPendingEmail(newUser.email);
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'Registration failed.');
+        return false;
+      }
+
+      const data = await response.json();
+      setDevCode(data.devCode);
+      setPendingEmail(data.email);
       setAuthStep('verify_email');
       return true;
     } catch (e) {
-      setError('Something went wrong. Please try again.');
+      setError('Connection error. Is the backend running?');
       return false;
     } finally {
       setLoading(false);
@@ -452,15 +435,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      await delay(700);
-      const found = findUserByEmail(email);
-      if (!found) {
-        setError('No account found for that email.');
+      const response = await fetch(`${API_BASE_URL}/api/auth/request-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'No account found for that email.');
         return false;
       }
-      found.passwordResetCode = generateCode();
-      setDevCode(found.passwordResetCode);
+
+      const data = await response.json();
+      setDevCode(data.devCode);
       return true;
+    } catch (e) {
+      setError('Connection error. Is the backend running?');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -470,23 +462,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      await delay(700);
-      const found = findUserByEmail(email);
-      if (!found || !found.passwordResetCode || found.passwordResetCode !== code.trim()) {
-        setError('Invalid or expired recovery code.');
-        return false;
-      }
       const policy = checkPasswordPolicy(newPassword);
       if (policy.score < MIN_PASSWORD_SCORE) {
         setError('New password is too weak. Meet at least 4 of the 5 requirements.');
         return false;
       }
-      found.passwordHash = sha256(newPassword);
-      found.passwordResetCode = undefined;
-      found.failedAttempts = 0;
-      found.lockoutUntil = undefined;
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code, newPassword })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'Invalid or expired recovery code.');
+        return false;
+      }
+
       setDevCode(null);
       return true;
+    } catch (e) {
+      setError('Connection error. Is the backend running?');
+      return false;
     } finally {
       setLoading(false);
     }

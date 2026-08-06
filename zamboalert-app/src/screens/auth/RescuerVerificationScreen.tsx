@@ -1,0 +1,754 @@
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Image,
+  Alert,
+  TextInput,
+  Animated,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { colors } from '../../theme/colors';
+import { typography, fontFamily } from '../../theme/typography';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type IdSide = 'front' | 'back';
+
+type IdType = {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  description: string;
+};
+
+type IdPhotoSlotProps = {
+  side: IdSide;
+  uri: string;
+  onPress: (side: IdSide) => void;
+};
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const ID_TYPES: IdType[] = [
+  { key: 'Barangay ID',   label: 'Barangay ID',   icon: 'business-outline',   description: 'Issued by your local barangay office' },
+  { key: 'Government ID', label: 'Government ID',  icon: 'card-outline',       description: 'National ID, SSS, GSIS, PhilHealth, etc.' },
+  { key: 'Drivers License', label: "Driver's License", icon: 'car-outline',   description: "LTO-issued driver's license" },
+  { key: 'Passport',      label: 'Passport',       icon: 'globe-outline',      description: 'Philippine passport' },
+];
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function StepIndicator({ current, total }: { current: number; total: number }) {
+  return (
+    <View style={styles.stepRow}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.stepDot,
+            i < current ? styles.stepDotComplete : i === current ? styles.stepDotActive : styles.stepDotInactive,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function IdTypeCard({ idType, selected, onPress }: { idType: IdType; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.idTypeCard,
+        selected && styles.idTypeCardActive,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={[styles.idTypeIconWrap, selected && styles.idTypeIconWrapActive]}>
+        <Ionicons
+          name={idType.icon}
+          size={20}
+          color={selected ? colors.primary : colors.textSecondary}
+        />
+      </View>
+      <View style={styles.idTypeTextWrap}>
+        <Text style={[styles.idTypeLabel, selected && styles.idTypeLabelActive]}>
+          {idType.label}
+        </Text>
+        <Text style={styles.idTypeDesc} numberOfLines={1}>
+          {idType.description}
+        </Text>
+      </View>
+      <View style={[styles.idTypeRadio, selected && styles.idTypeRadioActive]}>
+        {selected && <View style={styles.idTypeRadioDot} />}
+      </View>
+    </Pressable>
+  );
+}
+
+function IdPhotoSlot({ side, uri, onPress }: IdPhotoSlotProps) {
+  const isUploaded = !!uri;
+  const label = side === 'front' ? 'Front Side' : 'Back Side';
+  const icon: keyof typeof Ionicons.glyphMap = side === 'front' ? 'id-card-outline' : 'card-outline';
+
+  return (
+    <Pressable
+      onPress={() => onPress(side)}
+      style={({ pressed }) => [
+        styles.photoSlot,
+        isUploaded && styles.photoSlotUploaded,
+        pressed && { opacity: 0.8 },
+      ]}
+    >
+      {isUploaded ? (
+        <>
+          <Image source={{ uri }} style={styles.photoPreview} resizeMode="cover" />
+          <View style={styles.photoOverlay}>
+            <View style={styles.photoChangeBadge}>
+              <Ionicons name="pencil-outline" size={12} color="#fff" />
+              <Text style={styles.photoChangeBadgeText}>Change</Text>
+            </View>
+          </View>
+          <View style={styles.photoCheckBadge}>
+            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+          </View>
+        </>
+      ) : (
+        <View style={styles.photoSlotEmpty}>
+          <View style={styles.photoIconWrap}>
+            <Ionicons name={icon} size={32} color={colors.textSecondary} />
+          </View>
+          <Text style={styles.photoSlotLabel}>{label}</Text>
+          <Text style={styles.photoSlotHint}>Tap to upload</Text>
+          <View style={styles.photoUploadActions}>
+            <View style={styles.photoActionChip}>
+              <Ionicons name="camera-outline" size={12} color={colors.primary} />
+              <Text style={styles.photoActionChipText}>Camera</Text>
+            </View>
+            <View style={styles.photoActionDivider} />
+            <View style={styles.photoActionChip}>
+              <Ionicons name="images-outline" size={12} color={colors.primary} />
+              <Text style={styles.photoActionChipText}>Gallery</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function TipCard({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.tipCard}>
+      <Ionicons name={icon} size={16} color="#2F6FED" />
+      <Text style={styles.tipText}>{text}</Text>
+    </View>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
+
+export default function RescuerVerificationScreen({ navigation, route }) {
+  const [step, setStep] = useState(0);
+  const [idType, setIdType] = useState('Barangay ID');
+  const [idNumber, setIdNumber] = useState('');
+  const [idFrontUri, setIdFrontUri] = useState('');
+  const [idBackUri, setIdBackUri] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [idNumberFocused, setIdNumberFocused] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const goToStep = (next: number) => {
+    Animated.timing(slideAnim, {
+      toValue: -400,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setStep(next);
+      slideAnim.setValue(400);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 4,
+      }).start();
+    });
+  };
+
+  const pickPhoto = (side: IdSide) => {
+    Alert.alert(
+      `Upload ${side === 'front' ? 'Front' : 'Back'} Side`,
+      'Choose how you want to add the photo of your ID.',
+      [
+        { text: 'Take Photo', onPress: () => launchCamera(side) },
+        { text: 'Choose from Gallery', onPress: () => launchGallery(side) },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const launchCamera = async (side: IdSide) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Camera Permission Required', 'Please allow camera access in your device settings to take a photo of your ID.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 10],
+        quality: 0.7,
+        base64: true,
+      });
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        const uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        side === 'front' ? setIdFrontUri(uri) : setIdBackUri(uri);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to capture photo. Please try again.');
+    }
+  };
+
+  const launchGallery = async (side: IdSide) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Gallery Permission Required', 'Please allow gallery access in your device settings to pick a photo.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 10],
+        quality: 0.7,
+        base64: true,
+      });
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        const uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        side === 'front' ? setIdFrontUri(uri) : setIdBackUri(uri);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!idNumber.trim()) {
+      Alert.alert('ID Number Required', 'Please enter your ID number to continue.');
+      return;
+    }
+    if (!idFrontUri) {
+      Alert.alert('Front Photo Required', 'Please upload or capture the front side of your ID.');
+      return;
+    }
+    if (!idBackUri) {
+      Alert.alert('Back Photo Required', 'Please upload or capture the back side of your ID.');
+      return;
+    }
+    setSubmitting(true);
+    await new Promise(res => setTimeout(res, 1200));
+    setSubmitting(false);
+    Alert.alert(
+      'Submitted for Review',
+      "Your ID has been submitted. Our team will review your credentials within 24-48 hours. You'll receive a notification once verified.",
+      [{ text: 'Got it', onPress: () => navigation.navigate('Login') }]
+    );
+  };
+
+  const bothPhotosUploaded = !!idFrontUri && !!idBackUri;
+  const selectedIdType = ID_TYPES.find(t => t.key === idType)!;
+
+  const renderStep0 = () => (
+    <View>
+      <Text style={styles.stepHeading}>What type of ID do you have?</Text>
+      <Text style={styles.stepSub}>
+        Select the government-issued ID you'll use to verify your identity as a rescuer.
+      </Text>
+      <View style={styles.idTypeList}>
+        {ID_TYPES.map((t) => (
+          <IdTypeCard key={t.key} idType={t} selected={idType === t.key} onPress={() => setIdType(t.key)} />
+        ))}
+      </View>
+      <TipCard icon="shield-checkmark-outline" text="Your ID is encrypted and only used to verify your rescuer credentials." />
+    </View>
+  );
+
+  const renderStep1 = () => (
+    <View>
+      <Text style={styles.stepHeading}>Upload your {selectedIdType.label}</Text>
+      <Text style={styles.stepSub}>
+        Take clear, well-lit photos of both sides. Make sure all text is readable.
+      </Text>
+
+      <View style={styles.idNumberSection}>
+        <Text style={[typography.eyebrow, styles.fieldLabel]}>ID Number</Text>
+        <View style={[styles.idNumberWrap, idNumberFocused && styles.idNumberWrapFocused]}>
+          <Ionicons name={selectedIdType.icon} size={18} color={idNumberFocused ? colors.primary : colors.textSecondary} />
+          <TextInput
+            style={styles.idNumberInput}
+            placeholder={`Enter your ${selectedIdType.label} number`}
+            placeholderTextColor={colors.textMuted}
+            value={idNumber}
+            onChangeText={setIdNumber}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onFocus={() => setIdNumberFocused(true)}
+            onBlur={() => setIdNumberFocused(false)}
+          />
+          {idNumber.length > 0 && (
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          )}
+        </View>
+      </View>
+
+      <Text style={[typography.eyebrow, styles.fieldLabel]}>ID Photos</Text>
+      <View style={styles.photoSlotsRow}>
+        <IdPhotoSlot side="front" uri={idFrontUri} onPress={pickPhoto} />
+        <IdPhotoSlot side="back"  uri={idBackUri}  onPress={pickPhoto} />
+      </View>
+
+      <View style={styles.uploadProgress}>
+        <View style={styles.uploadProgressBar}>
+          <View
+            style={[
+              styles.uploadProgressFill,
+              {
+                width: `${
+                  !idFrontUri && !idBackUri ? 0 :
+                  idFrontUri && idBackUri ? 100 : 50
+                }%`,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.uploadProgressText}>
+          {!idFrontUri && !idBackUri
+            ? '0 of 2 photos uploaded'
+            : idFrontUri && idBackUri
+            ? 'Both photos uploaded'
+            : '1 of 2 photos uploaded'}
+        </Text>
+      </View>
+
+      <View style={styles.tipsGroup}>
+        <TipCard icon="sunny-outline"   text="Ensure good lighting — avoid shadows on the ID." />
+        <TipCard icon="scan-outline"    text="Keep the ID flat and all 4 corners in frame." />
+        <TipCard icon="eye-off-outline" text="Cover any non-required fields like your signature." />
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => (step > 0 ? goToStep(step - 1) : navigation.goBack())}
+          style={styles.backBtn}
+          hitSlop={8}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <View style={styles.shieldBadge}>
+            <Ionicons name="shield-checkmark" size={16} color={colors.primary} />
+          </View>
+          <Text style={styles.headerTitle}>Rescuer Verification</Text>
+        </View>
+        <View style={{ width: 38 }} />
+      </View>
+
+      <View style={styles.stepIndicatorWrap}>
+        <StepIndicator current={step} total={2} />
+        <Text style={styles.stepCounter}>Step {step + 1} of 2</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={{ transform: [{ translateX: slideAnim }] }}>
+          {step === 0 ? renderStep0() : renderStep1()}
+        </Animated.View>
+      </ScrollView>
+
+      <View style={styles.bottomBar}>
+        {step === 0 ? (
+          <Pressable onPress={() => goToStep(1)} style={styles.primaryBtn}>
+            <Text style={styles.primaryBtnText}>Continue</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
+          </Pressable>
+        ) : submitting ? (
+          <View style={[styles.primaryBtn, styles.primaryBtnLoading]}>
+            <ActivityIndicator color="#fff" size="small" />
+            <Text style={styles.primaryBtnText}>Submitting…</Text>
+          </View>
+        ) : (
+          <Pressable
+            onPress={handleSubmit}
+            style={[styles.primaryBtn, (!idNumber.trim() || !bothPhotosUploaded) && styles.primaryBtnDisabled]}
+            disabled={!idNumber.trim() || !bothPhotosUploaded}
+          >
+            <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+            <Text style={styles.primaryBtnText}>Submit for Review</Text>
+          </Pressable>
+        )}
+
+        {step === 1 && (
+          <Pressable onPress={() => navigation.navigate('Login')} style={styles.skipBtn}>
+            <Text style={styles.skipBtnText}>Skip for now</Text>
+          </Pressable>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const SLOT_H = 160;
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.inactiveBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  shieldBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+
+  // Step indicator
+  stepIndicatorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stepRow: { flexDirection: 'row', gap: 6 },
+  stepDot: { height: 4, borderRadius: 2 },
+  stepDotActive:   { width: 24, backgroundColor: colors.primary },
+  stepDotComplete: { width: 24, backgroundColor: colors.primary, opacity: 0.4 },
+  stepDotInactive: { width: 12, backgroundColor: colors.border },
+  stepCounter: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+
+  // Scroll
+  scroll: { flexGrow: 1, padding: 20, paddingBottom: 24 },
+
+  // Step text
+  stepHeading: {
+    fontFamily: fontFamily.bold,
+    fontSize: 22,
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  stepSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  fieldLabel: { marginBottom: 10 },
+
+  // ID Type Cards
+  idTypeList: { gap: 10, marginBottom: 20 },
+  idTypeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  idTypeCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  idTypeIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.inactiveBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idTypeIconWrapActive: { backgroundColor: 'rgba(224, 52, 43, 0.15)' },
+  idTypeTextWrap: { flex: 1 },
+  idTypeLabel: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  idTypeLabelActive: { color: colors.primary },
+  idTypeDesc: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  idTypeRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idTypeRadioActive: { borderColor: colors.primary },
+  idTypeRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+  },
+
+  // ID Number
+  idNumberSection: { marginBottom: 20 },
+  idNumberWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    gap: 10,
+  },
+  idNumberWrapFocused: {
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  idNumberInput: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 15,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
+  },
+
+  // Photo Slots
+  photoSlotsRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
+  photoSlot: {
+    flex: 1,
+    height: SLOT_H,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoSlotUploaded: {
+    borderStyle: 'solid',
+    borderColor: colors.success,
+  },
+  photoPreview: { width: '100%', height: '100%' },
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 8,
+  },
+  photoChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  photoChangeBadgeText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 11,
+    color: '#fff',
+  },
+  photoCheckBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#fff',
+    borderRadius: 11,
+  },
+  photoSlotEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    gap: 6,
+  },
+  photoIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.inactiveBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  photoSlotLabel: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  photoSlotHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  photoUploadActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 6,
+  },
+  photoActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  photoActionChipText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 10,
+    color: colors.primary,
+  },
+  photoActionDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: colors.border,
+  },
+
+  // Upload Progress
+  uploadProgress: { marginBottom: 20, gap: 6 },
+  uploadProgressBar: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  uploadProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: colors.success,
+  },
+  uploadProgressText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Tips
+  tipsGroup: { gap: 8 },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(47, 111, 237, 0.07)',
+  },
+  tipText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: '#1e3a8a',
+    lineHeight: 17,
+  },
+
+  // Bottom bar
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 14,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 10,
+  },
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+  },
+  primaryBtnLoading: { backgroundColor: colors.primaryDark },
+  primaryBtnDisabled: { backgroundColor: '#EDAAAA' },
+  primaryBtnText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 15,
+    color: '#fff',
+  },
+  skipBtn: { alignItems: 'center', paddingVertical: 6 },
+  skipBtnText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+});

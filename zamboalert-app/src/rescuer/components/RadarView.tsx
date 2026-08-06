@@ -7,6 +7,16 @@ import { situationColors } from '../assets/mockData';
 import { styles } from '../theme/styles';
 import { useAnimatedValue } from '../utils/hooks';
 
+const getDisasterEmoji = (disaster?: string) => {
+  if (!disaster) return '';
+  const d = disaster.toLowerCase();
+  if (d === 'flood') return '🌊';
+  if (d === 'landslide') return '🪨';
+  if (d === 'earthquake') return '🏢';
+  if (d === 'fire') return '🔥';
+  return '⚠️';
+};
+
 export function RadarView({
   victims,
   selected,
@@ -196,6 +206,14 @@ export function RadarView({
                       <Mono style={styles.victimCardSubText}>{v.bearing}°</Mono>
                       <Text style={styles.bullet}>·</Text>
                       <Mono style={styles.victimCardSubText}>Floor {v.floor}</Mono>
+                      {v.disasterType && (
+                        <>
+                          <Text style={styles.bullet}>·</Text>
+                          <Mono style={[styles.victimCardSubText, { color: '#dc2626', fontWeight: 'bold' }]}>
+                            {getDisasterEmoji(v.disasterType)} {v.disasterType.toUpperCase()}
+                          </Mono>
+                        </>
+                      )}
                     </View>
                   </View>
                 </View>

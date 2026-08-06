@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import WelcomeScreen  from '../screens/auth/WelcomeScreen';
 import LoginScreen    from '../screens/auth/LoginScreen';
 import SignUpScreen   from '../screens/auth/SignUpScreen';
+import RescuerVerificationScreen from '../screens/auth/RescuerVerificationScreen';
 
 import SOSScreen      from '../screens/Citizen/SOSScreen';
 import StatusScreen   from '../screens/Citizen/StatusScreen';
@@ -79,6 +80,11 @@ function AuthStack() {
       <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Login"   component={LoginScreen}   options={{ title: 'Login' }} />
       <Stack.Screen name="SignUp"  component={SignUpScreen}  options={{ title: 'Sign Up' }} />
+      <Stack.Screen
+        name="RescuerVerification"
+        component={RescuerVerificationScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image,
+  KeyboardAvoidingView, Platform, Image, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { PrimaryButton } from '../../components/Button';
@@ -46,7 +47,71 @@ export default function SignUpScreen({ navigation }) {
   const [localError, setLocalError]   = useState('');
   const [idType, setIdType]           = useState('Barangay ID');
   const [idNumber, setIdNumber]       = useState('');
-  const [idPhotoUploaded, setIdPhotoUploaded] = useState(false);
+  const [idFrontUri, setIdFrontUri]   = useState('');
+  const [idBackUri, setIdBackUri]     = useState('');
+
+  const pickIdPhoto = (side: 'front' | 'back') => {
+    handleChange();
+    Alert.alert(
+      'Upload ID Photo',
+      `Please select a source for the ${side} side of your ID.`,
+      [
+        { text: 'Take Photo', onPress: () => capturePhoto(side) },
+        { text: 'Choose from Gallery', onPress: () => selectFromGallery(side) },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const capturePhoto = async (side: 'front' | 'back') => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Camera permission is required to take a photo of your ID.');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true
+      });
+
+      if (!result.canceled && result.assets && result.assets[0].base64) {
+        const base64Uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        if (side === 'front') setIdFrontUri(base64Uri);
+        else setIdBackUri(base64Uri);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const selectFromGallery = async (side: 'front' | 'back') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Gallery permission is required to choose a photo of your ID.');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true
+      });
+
+      if (!result.canceled && result.assets && result.assets[0].base64) {
+        const base64Uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        if (side === 'front') setIdFrontUri(base64Uri);
+        else setIdBackUri(base64Uri);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
 
   const combinedError = localError || error;
   function handleChange() { if (localError) setLocalError(''); if (error) clearError(); }
@@ -59,7 +124,8 @@ export default function SignUpScreen({ navigation }) {
     if (contactNumber.trim().length < 7) { setLocalError('Please enter a valid contact number.'); return; }
     if (role === 'rescuer') {
       if (!idNumber.trim()) { setLocalError('Please enter your ID number.'); return; }
-      if (!idPhotoUploaded) { setLocalError('Please upload your ID photo.'); return; }
+      if (!idFrontUri) { setLocalError('Please upload the front photo of your ID.'); return; }
+      if (!idBackUri) { setLocalError('Please upload the back photo of your ID.'); return; }
     }
     if (!email.includes('@')) { setLocalError('Please enter a valid email address.'); return; }
     if (checkPasswordPolicy(password).score < MIN_PASSWORD_SCORE) {
@@ -68,11 +134,16 @@ export default function SignUpScreen({ navigation }) {
     }
     if (password !== confirm) { setLocalError('Passwords do not match.'); return; }
 
-    const started = await signUp(firstName, lastName, email, password, role, contactNumber, idType, idNumber);
-    // On success, AuthContext switches into its email-verification step and
-    // RootNavigator/LoginScreen picks that up — nothing else to do here.
+    const started = await signUp(firstName, lastName, email, password, role, contactNumber, idType, idNumber, idFrontUri, idBackUri);
+    // On success, navigate rescuers to the dedicated verification screen
     if (started) {
-      navigation.navigate('Login');
+      if (role === 'rescuer') {
+        navigation.navigate('RescuerVerification', {
+          registrationData: { firstName, lastName, email, role, contactNumber },
+        });
+      } else {
+        navigation.navigate('Login');
+      }
     }
   }
 
@@ -122,20 +193,36 @@ export default function SignUpScreen({ navigation }) {
               <InputField icon="card-outline" placeholder="e.g. BRGY-12345" value={idNumber}
                 onChangeText={(t) => { setIdNumber(t); handleChange(); }} />
 
-              <Text style={[typography.eyebrow, styles.fieldLabel]}>Upload ID Photo</Text>
-              <Pressable
-                style={[styles.uploadBtn, idPhotoUploaded && styles.uploadBtnActive]}
-                onPress={() => { setIdPhotoUploaded(true); handleChange(); }}
-              >
-                <Ionicons
-                  name={idPhotoUploaded ? 'checkmark-circle-outline' : 'cloud-upload-outline'}
-                  size={18}
-                  color={idPhotoUploaded ? colors.primary : colors.textSecondary}
-                />
-                <Text style={[styles.uploadBtnText, idPhotoUploaded && styles.uploadBtnTextActive]}>
-                  {idPhotoUploaded ? 'id_photo.jpg (Uploaded)' : 'Select image/document'}
-                </Text>
-              </Pressable>
+              <Text style={[typography.eyebrow, styles.fieldLabel]}>Upload ID Photos (Front & Back)</Text>
+              <View style={styles.idPhotosRow}>
+                <Pressable
+                  style={[styles.uploadHalfBtn, idFrontUri ? styles.uploadBtnActive : null]}
+                  onPress={() => pickIdPhoto('front')}
+                >
+                  {idFrontUri ? (
+                    <Image source={{ uri: idFrontUri }} style={styles.pickedImagePreview} />
+                  ) : (
+                    <Ionicons name="camera-outline" size={24} color={colors.textSecondary} />
+                  )}
+                  <Text style={[styles.uploadBtnText, idFrontUri ? styles.uploadBtnTextActive : null]}>
+                    {idFrontUri ? 'Change Front' : 'Front Side'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.uploadHalfBtn, idBackUri ? styles.uploadBtnActive : null]}
+                  onPress={() => pickIdPhoto('back')}
+                >
+                  {idBackUri ? (
+                    <Image source={{ uri: idBackUri }} style={styles.pickedImagePreview} />
+                  ) : (
+                    <Ionicons name="camera-outline" size={24} color={colors.textSecondary} />
+                  )}
+                  <Text style={[styles.uploadBtnText, idBackUri ? styles.uploadBtnTextActive : null]}>
+                    {idBackUri ? 'Change Back' : 'Back Side'}
+                  </Text>
+                </Pressable>
+              </View>
             </>
           )}
 
@@ -255,6 +342,9 @@ const styles = StyleSheet.create({
   uploadBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   uploadBtnText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.textSecondary },
   uploadBtnTextActive: { color: colors.primary },
+  idPhotosRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  uploadHalfBtn: { flex: 1, height: 110, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden' },
+  pickedImagePreview: { width: '100%', height: '70%', resizeMode: 'cover' },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(47,111,237,0.08)', borderRadius: 10, padding: 12, marginBottom: 20 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 10 },
   input: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary },
