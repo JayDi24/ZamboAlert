@@ -11,6 +11,7 @@ import {
   TextInput,
   Animated,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -124,19 +125,17 @@ function IdPhotoSlot({ side, uri, onPress }: IdPhotoSlotProps) {
       ) : (
         <View style={styles.photoSlotEmpty}>
           <View style={styles.photoIconWrap}>
-            <Ionicons name={icon} size={32} color={colors.textSecondary} />
+            <Ionicons name={icon} size={30} color={colors.primary} />
           </View>
           <Text style={styles.photoSlotLabel}>{label}</Text>
           <Text style={styles.photoSlotHint}>Tap to upload</Text>
           <View style={styles.photoUploadActions}>
             <View style={styles.photoActionChip}>
               <Ionicons name="camera-outline" size={12} color={colors.primary} />
-              <Text style={styles.photoActionChipText}>Camera</Text>
             </View>
             <View style={styles.photoActionDivider} />
             <View style={styles.photoActionChip}>
               <Ionicons name="images-outline" size={12} color={colors.primary} />
-              <Text style={styles.photoActionChipText}>Gallery</Text>
             </View>
           </View>
         </View>
@@ -148,7 +147,7 @@ function IdPhotoSlot({ side, uri, onPress }: IdPhotoSlotProps) {
 function TipCard({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
   return (
     <View style={styles.tipCard}>
-      <Ionicons name={icon} size={16} color="#2F6FED" />
+      <Ionicons name={icon} size={16} color={colors.primary} />
       <Text style={styles.tipText}>{text}</Text>
     </View>
   );
@@ -164,6 +163,8 @@ export default function RescuerVerificationScreen({ navigation, route }) {
   const [idBackUri, setIdBackUri] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [idNumberFocused, setIdNumberFocused] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeSide, setActiveSide] = useState<IdSide | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const goToStep = (next: number) => {
@@ -182,16 +183,18 @@ export default function RescuerVerificationScreen({ navigation, route }) {
     });
   };
 
+  const openModal = (side: IdSide) => {
+    setActiveSide(side);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setActiveSide(null);
+  };
+
   const pickPhoto = (side: IdSide) => {
-    Alert.alert(
-      `Upload ${side === 'front' ? 'Front' : 'Back'} Side`,
-      'Choose how you want to add the photo of your ID.',
-      [
-        { text: 'Take Photo', onPress: () => launchCamera(side) },
-        { text: 'Choose from Gallery', onPress: () => launchGallery(side) },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    openModal(side);
   };
 
   const launchCamera = async (side: IdSide) => {
@@ -408,6 +411,83 @@ export default function RescuerVerificationScreen({ navigation, route }) {
           </Pressable>
         )}
       </View>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeModal}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalDragIndicator} />
+              <Text style={styles.modalTitle}>
+                Upload {activeSide === 'front' ? 'Front Side' : 'Back Side'}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                Select a photo source to upload your ID
+              </Text>
+            </View>
+
+            <View style={styles.modalOptions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalOptionBtn,
+                  pressed && styles.modalOptionBtnPressed,
+                ]}
+                onPress={() => {
+                  if (activeSide) {
+                    launchCamera(activeSide);
+                  }
+                  closeModal();
+                }}
+              >
+                <View style={[styles.modalOptionIconWrap, { backgroundColor: '#FEF2F2' }]}>
+                  <Ionicons name="camera-outline" size={24} color={colors.primary} />
+                </View>
+                <View style={styles.modalOptionTextWrap}>
+                  <Text style={styles.modalOptionLabel}>Take Photo</Text>
+                  <Text style={styles.modalOptionDesc}>Use your camera to snap a picture</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalOptionBtn,
+                  pressed && styles.modalOptionBtnPressed,
+                ]}
+                onPress={() => {
+                  if (activeSide) {
+                    launchGallery(activeSide);
+                  }
+                  closeModal();
+                }}
+              >
+                <View style={[styles.modalOptionIconWrap, { backgroundColor: '#F0FDF4' }]}>
+                  <Ionicons name="images-outline" size={24} color="#15803D" />
+                </View>
+                <View style={styles.modalOptionTextWrap}>
+                  <Text style={styles.modalOptionLabel}>Choose from Gallery</Text>
+                  <Text style={styles.modalOptionDesc}>Pick an existing photo from your library</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalCancelBtn,
+                pressed && styles.modalCancelBtnPressed,
+              ]}
+              onPress={closeModal}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -637,10 +717,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   photoIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.inactiveBg,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
@@ -708,14 +788,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     padding: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(47, 111, 237, 0.07)',
+    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: 'rgba(224, 52, 43, 0.15)',
   },
   tipText: {
     flex: 1,
     fontFamily: fontFamily.regular,
     fontSize: 12,
-    color: '#1e3a8a',
+    color: '#991B1B',
     lineHeight: 17,
   },
 
@@ -750,5 +832,103 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalDragIndicator: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  modalOptions: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  modalOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalOptionBtnPressed: {
+    backgroundColor: colors.inactiveBg,
+    borderColor: colors.textSecondary,
+  },
+  modalOptionIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  modalOptionTextWrap: {
+    flex: 1,
+  },
+  modalOptionLabel: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  modalOptionDesc: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  modalCancelBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.inactiveBg,
+    marginTop: 8,
+  },
+  modalCancelBtnPressed: {
+    opacity: 0.8,
+  },
+  modalCancelText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    color: colors.textPrimary,
   },
 });

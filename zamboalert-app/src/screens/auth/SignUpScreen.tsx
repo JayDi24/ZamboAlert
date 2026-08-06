@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, Alert
+  KeyboardAvoidingView, Platform, Image, Alert, Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +19,12 @@ type RolePillProps = {
   description: string;
   active: boolean;
   onPress: () => void;
+};
+
+type IdPhotoSlotProps = {
+  side: 'front' | 'back';
+  uri: string;
+  onPress: (side: 'front' | 'back') => void;
 };
 
 type InputFieldProps = {
@@ -50,17 +56,22 @@ export default function SignUpScreen({ navigation }) {
   const [idFrontUri, setIdFrontUri]   = useState('');
   const [idBackUri, setIdBackUri]     = useState('');
 
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeSide, setActiveSide] = useState<'front' | 'back' | null>(null);
+
+  const openModal = (side: 'front' | 'back') => {
+    setActiveSide(side);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setActiveSide(null);
+  };
+
   const pickIdPhoto = (side: 'front' | 'back') => {
     handleChange();
-    Alert.alert(
-      'Upload ID Photo',
-      `Please select a source for the ${side} side of your ID.`,
-      [
-        { text: 'Take Photo', onPress: () => capturePhoto(side) },
-        { text: 'Choose from Gallery', onPress: () => selectFromGallery(side) },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    openModal(side);
   };
 
   const capturePhoto = async (side: 'front' | 'back') => {
@@ -194,34 +205,17 @@ export default function SignUpScreen({ navigation }) {
                 onChangeText={(t) => { setIdNumber(t); handleChange(); }} />
 
               <Text style={[typography.eyebrow, styles.fieldLabel]}>Upload ID Photos (Front & Back)</Text>
-              <View style={styles.idPhotosRow}>
-                <Pressable
-                  style={[styles.uploadHalfBtn, idFrontUri ? styles.uploadBtnActive : null]}
-                  onPress={() => pickIdPhoto('front')}
-                >
-                  {idFrontUri ? (
-                    <Image source={{ uri: idFrontUri }} style={styles.pickedImagePreview} />
-                  ) : (
-                    <Ionicons name="camera-outline" size={24} color={colors.textSecondary} />
-                  )}
-                  <Text style={[styles.uploadBtnText, idFrontUri ? styles.uploadBtnTextActive : null]}>
-                    {idFrontUri ? 'Change Front' : 'Front Side'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={[styles.uploadHalfBtn, idBackUri ? styles.uploadBtnActive : null]}
-                  onPress={() => pickIdPhoto('back')}
-                >
-                  {idBackUri ? (
-                    <Image source={{ uri: idBackUri }} style={styles.pickedImagePreview} />
-                  ) : (
-                    <Ionicons name="camera-outline" size={24} color={colors.textSecondary} />
-                  )}
-                  <Text style={[styles.uploadBtnText, idBackUri ? styles.uploadBtnTextActive : null]}>
-                    {idBackUri ? 'Change Back' : 'Back Side'}
-                  </Text>
-                </Pressable>
+              <View style={styles.photoSlotsRow}>
+                <IdPhotoSlot
+                  side="front"
+                  uri={idFrontUri}
+                  onPress={pickIdPhoto}
+                />
+                <IdPhotoSlot
+                  side="back"
+                  uri={idBackUri}
+                  onPress={pickIdPhoto}
+                />
               </View>
             </>
           )}
@@ -282,7 +276,133 @@ export default function SignUpScreen({ navigation }) {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeModal}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalDragIndicator} />
+              <Text style={styles.modalTitle}>
+                Upload {activeSide === 'front' ? 'Front Side' : 'Back Side'}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                Select a photo source to upload your ID
+              </Text>
+            </View>
+
+            <View style={styles.modalOptions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalOptionBtn,
+                  pressed && styles.modalOptionBtnPressed,
+                ]}
+                onPress={() => {
+                  if (activeSide) {
+                    capturePhoto(activeSide);
+                  }
+                  closeModal();
+                }}
+              >
+                <View style={[styles.modalOptionIconWrap, { backgroundColor: '#FEF2F2' }]}>
+                  <Ionicons name="camera-outline" size={24} color={colors.primary} />
+                </View>
+                <View style={styles.modalOptionTextWrap}>
+                  <Text style={styles.modalOptionLabel}>Take Photo</Text>
+                  <Text style={styles.modalOptionDesc}>Use your camera to snap a picture</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalOptionBtn,
+                  pressed && styles.modalOptionBtnPressed,
+                ]}
+                onPress={() => {
+                  if (activeSide) {
+                    selectFromGallery(activeSide);
+                  }
+                  closeModal();
+                }}
+              >
+                <View style={[styles.modalOptionIconWrap, { backgroundColor: '#F0FDF4' }]}>
+                  <Ionicons name="images-outline" size={24} color="#15803D" />
+                </View>
+                <View style={styles.modalOptionTextWrap}>
+                  <Text style={styles.modalOptionLabel}>Choose from Gallery</Text>
+                  <Text style={styles.modalOptionDesc}>Pick an existing photo from your library</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalCancelBtn,
+                pressed && styles.modalCancelBtnPressed,
+              ]}
+              onPress={closeModal}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+function IdPhotoSlot({ side, uri, onPress }: IdPhotoSlotProps) {
+  const isUploaded = !!uri;
+  const label = side === 'front' ? 'Front Side' : 'Back Side';
+  const icon: keyof typeof Ionicons.glyphMap = side === 'front' ? 'id-card-outline' : 'card-outline';
+
+  return (
+    <Pressable
+      onPress={() => onPress(side)}
+      style={({ pressed }) => [
+        styles.photoSlot,
+        isUploaded && styles.photoSlotUploaded,
+        pressed && { opacity: 0.8 },
+      ]}
+    >
+      {isUploaded ? (
+        <>
+          <Image source={{ uri }} style={styles.photoPreview} resizeMode="cover" />
+          <View style={styles.photoOverlay}>
+            <View style={styles.photoChangeBadge}>
+              <Ionicons name="pencil-outline" size={12} color="#fff" />
+              <Text style={styles.photoChangeBadgeText}>Change</Text>
+            </View>
+          </View>
+          <View style={styles.photoCheckBadge}>
+            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+          </View>
+        </>
+      ) : (
+        <View style={styles.photoSlotEmpty}>
+          <View style={styles.photoIconWrap}>
+            <Ionicons name={icon} size={30} color={colors.primary} />
+          </View>
+          <Text style={styles.photoSlotLabel}>{label}</Text>
+          <Text style={styles.photoSlotHint}>Tap to upload</Text>
+          <View style={styles.photoUploadActions}>
+            <View style={styles.photoActionChip}>
+              <Ionicons name="camera-outline" size={12} color={colors.primary} />
+            </View>
+            <View style={styles.photoActionDivider} />
+            <View style={styles.photoActionChip}>
+              <Ionicons name="images-outline" size={12} color={colors.primary} />
+            </View>
+          </View>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -338,14 +458,103 @@ const styles = StyleSheet.create({
   idTypePillActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   idTypePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.textSecondary },
   idTypePillTextActive: { color: colors.primary },
-  uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.surface, marginBottom: 16 },
-  uploadBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  uploadBtnText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.textSecondary },
-  uploadBtnTextActive: { color: colors.primary },
-  idPhotosRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  uploadHalfBtn: { flex: 1, height: 110, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden' },
-  pickedImagePreview: { width: '100%', height: '70%', resizeMode: 'cover' },
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(47,111,237,0.08)', borderRadius: 10, padding: 12, marginBottom: 20 },
+  photoSlotsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  photoSlot: {
+    flex: 1,
+    height: 140,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoSlotUploaded: {
+    borderStyle: 'solid',
+    borderColor: colors.success,
+  },
+  photoPreview: { width: '100%', height: '100%' },
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 8,
+  },
+  photoChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  photoChangeBadgeText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    color: '#fff',
+  },
+  photoCheckBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#fff',
+    borderRadius: 11,
+  },
+  photoSlotEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    gap: 6,
+  },
+  photoIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  photoSlotLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  photoSlotHint: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  photoUploadActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 6,
+  },
+  photoActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  photoActionChipText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    color: colors.primary,
+  },
+  photoActionDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: colors.border,
+  },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: colors.primaryLight, borderRadius: 10, padding: 12, marginBottom: 20 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 10 },
   input: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(224,52,43,0.08)', borderRadius: 10, padding: 12, marginBottom: 8 },
@@ -353,4 +562,102 @@ const styles = StyleSheet.create({
   submitRow: { marginTop: 8, marginBottom: 24 },
   switchRow: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 16 },
   link: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.primary },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalDragIndicator: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  modalOptions: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  modalOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalOptionBtnPressed: {
+    backgroundColor: colors.inactiveBg,
+    borderColor: colors.textSecondary,
+  },
+  modalOptionIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  modalOptionTextWrap: {
+    flex: 1,
+  },
+  modalOptionLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  modalOptionDesc: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  modalCancelBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.inactiveBg,
+    marginTop: 8,
+  },
+  modalCancelBtnPressed: {
+    opacity: 0.8,
+  },
+  modalCancelText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
 });
