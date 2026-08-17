@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
 import { typography, fontFamily } from '../../theme/typography';
+import WaitingForApprovalModal from '../../components/Approval';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ export default function RescuerVerificationScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
   const [idNumberFocused, setIdNumberFocused] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [showWaitingModal, setShowWaitingModal] = useState(false);
   const [activeSide, setActiveSide] = useState<IdSide | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -259,11 +261,7 @@ export default function RescuerVerificationScreen({ navigation, route }) {
     setSubmitting(true);
     await new Promise(res => setTimeout(res, 1200));
     setSubmitting(false);
-    Alert.alert(
-      'Submitted for Review',
-      "Your ID has been submitted. Our team will review your credentials within 24-48 hours. You'll receive a notification once verified.",
-      [{ text: 'Got it', onPress: () => navigation.navigate('Login') }]
-    );
+    setShowWaitingModal(true);
   };
 
   const bothPhotosUploaded = !!idFrontUri && !!idBackUri;
@@ -488,6 +486,22 @@ export default function RescuerVerificationScreen({ navigation, route }) {
           </View>
         </Pressable>
       </Modal>
+
+      <WaitingForApprovalModal
+        visible={showWaitingModal}
+        onClose={() => {
+          setShowWaitingModal(false);
+          navigation.navigate('Login');
+        }}
+        rescuerName={
+          route.params?.registrationData
+            ? `${route.params.registrationData.firstName} ${route.params.registrationData.lastName}`
+            : 'Rescuer Applicant'
+        }
+        rescuerEmail={route.params?.registrationData?.email}
+        idType={selectedIdType ? selectedIdType.label : idType}
+        idNumber={idNumber}
+      />
     </SafeAreaView>
   );
 }

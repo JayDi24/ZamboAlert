@@ -35,7 +35,7 @@ function CitizenTabs() {
   const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
-    id={undefined}
+      id="citizen-tabs"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: [styles.tabBar, { height: 64 + insets.bottom, paddingBottom: 8 + insets.bottom }],
@@ -69,7 +69,7 @@ function CitizenTabs() {
 function AuthStack() {
   return (
     <Stack.Navigator
-    id={undefined}
+      id="auth-stack"
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.textPrimary,

@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Image, Animated, Easing, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { PrimaryButton, SecondaryButton } from '../../components/Button';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -138,61 +137,96 @@ export default function WelcomeScreen({ navigation }) {
     return () => clearTimeout(timer);
   }, [targetLayout]);
 
+  const overlayOpacity = contentOpacity.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="light" />
-        <View style={styles.hero}>
-          {/* logoWrap contains the reference to measure final location */}
-          <View 
-            ref={logoWrapRef} 
-            onLayout={handleLogoLayout} 
-            style={[styles.logoWrap, { opacity: animationDone ? 1 : 0 }]} 
-          >
-            {/* Render a normal image inside when animation is done, so it's fully responsive */}
-            {animationDone && (
-              <Image source={require('../../assets/zamboalert.png')} style={styles.logoImage} />
-            )}
-          </View>
+        <StatusBar style={animationDone ? 'dark' : 'light'} />
+        
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={[styles.mainContent, { opacity: contentOpacity }]}>
+            {/* Target logo container */}
+            <View 
+              ref={logoWrapRef} 
+              onLayout={handleLogoLayout} 
+              style={[styles.logoWrap, { opacity: animationDone ? 1 : 0 }]} 
+            >
+              {animationDone && (
+                <Image source={require('../../assets/zamboalert.png')} style={styles.logoImage} />
+              )}
+            </View>
 
-          {/* Main welcome screen contents fade in */}
-          <Animated.View style={{ alignItems: 'center', opacity: contentOpacity, width: '100%' }}>
-            <Text style={styles.appName}>ZamboAlert</Text>
-            <Text style={styles.tagline}>
-              Emergency communication for Zamboanga City — even when all signals are gone.
-            </Text>
-            <View style={styles.pillRow}>
-              <Pill icon="bluetooth" label="BLE Beacon" />
-              <Pill icon="radio-outline" label="LoRa Mesh" />
-              <Pill icon="navigate" label="GPS Offline" />
+            {/* Google-style Text Presentation */}
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.eyebrow}>Offline Emergency Network</Text>
+              <Text style={styles.appName}>ZamboAlert</Text>
+              <Text style={styles.tagline}>
+                Decentralized emergency communication for Zamboanga City. Keep in touch with responders even when all networks and internet are completely down.
+              </Text>
+            </View>
+
+            {/* Google-style Cards */}
+            <View style={styles.featuresContainer}>
+              <FeatureCard 
+                icon="bluetooth-outline" 
+                title="Offline BLE Beaconing" 
+                description="Broadcasts high-priority emergency distress signals to nearby search & rescue pods."
+              />
+              <FeatureCard 
+                icon="radio-outline" 
+                title="LoRa Mesh Routing" 
+                description="Bridges messages across active rescuer nodes to extend coverage in crisis zones."
+              />
+              <FeatureCard 
+                icon="navigate-outline" 
+                title="GPS Offline Localization" 
+                description="Encodes precise geographical coordinates directly into beacon data for rapid response."
+              />
             </View>
           </Animated.View>
-        </View>
+        </ScrollView>
 
-        {/* Bottom card slides up and fades in */}
+        {/* Sticky bottom Google-style action buttons */}
         <Animated.View 
           style={[
-            styles.bottom, 
+            styles.bottomContainer, 
             { 
               opacity: contentOpacity,
               transform: [{ translateY: bottomTranslateY }]
             }
           ]}
         >
-          <Text style={styles.bottomHeading}>Get started</Text>
-          <Text style={[typography.meta, styles.bottomSub]}>
-            Sign in to your account or create a new one to access emergency
-            services and stay connected during crises.
-          </Text>
           <View style={styles.buttonStack}>
-            <PrimaryButton label="Sign in" icon="arrow-forward-outline" onPress={() => navigation.navigate('Login')} />
-            <SecondaryButton label="Create an account" onPress={() => navigation.navigate('SignUp')} fullWidth />
+            <GooglePrimaryButton label="Sign in" onPress={() => navigation.navigate('Login')} />
+            <GoogleSecondaryButton label="Create an account" onPress={() => navigation.navigate('SignUp')} />
           </View>
-          <Text style={[typography.meta, styles.disclaimer]}>
-            By continuing you agree to ZamboAlert's terms of use and privacy policy.
+          <Text style={styles.disclaimer}>
+            By continuing, you agree to ZamboAlert's terms of use and privacy policy.
           </Text>
         </Animated.View>
       </SafeAreaView>
+
+      {/* Red splash overlay that fades out during intro transition */}
+      {layoutMeasured && !animationDone && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: colors.primary,
+              opacity: overlayOpacity,
+              zIndex: 5,
+            },
+          ]}
+        />
+      )}
 
       {/* Animated moving logo overlaid during transition */}
       {layoutMeasured && !animationDone && targetLayout && (
@@ -230,65 +264,210 @@ export default function WelcomeScreen({ navigation }) {
   );
 }
 
-function Pill({ icon, label }) {
+function FeatureCard({ icon, title, description }: { icon: keyof typeof Ionicons.glyphMap; title: string; description: string }) {
   return (
-    <View style={styles.pill}>
-      <Ionicons name={icon} size={13} color="rgba(255,255,255,0.85)" />
-      <Text style={styles.pillText}>{label}</Text>
+    <View style={styles.card}>
+      <View style={styles.cardIconContainer}>
+        <Ionicons name={icon} size={20} color={colors.primary} />
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardDescription}>{description}</Text>
+      </View>
     </View>
   );
 }
 
+function GooglePrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.googlePrimary,
+        pressed && styles.googlePrimaryPressed,
+      ]}
+    >
+      <Text style={styles.googlePrimaryLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function GoogleSecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.googleSecondary,
+        pressed && styles.googleSecondaryPressed,
+      ]}
+    >
+      <Text style={styles.googleSecondaryLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.primary },
-  safe: { flex: 1, backgroundColor: colors.primary },
-  hero: {
-    flex: 1,
+  container: { 
+    flex: 1, 
+    backgroundColor: colors.background 
+  },
+  safe: { 
+    flex: 1, 
+    backgroundColor: colors.background 
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    paddingTop: 36,
+    paddingBottom: 20,
+  },
+  mainContent: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingBottom: 32,
+    width: '100%',
   },
   logoWrap: {
-    width: 80, height: 80,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20,
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   logoImage: {
     width: 80,
     height: 80,
     resizeMode: 'contain',
   },
+  headerTextContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    marginBottom: 16,
+  },
+  eyebrow: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
   appName: {
-    fontFamily: 'Inter_700Bold', fontSize: 34,
-    color: colors.textOnPrimary, letterSpacing: -0.5, marginBottom: 10,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 32,
+    color: colors.textPrimary,
+    letterSpacing: -0.8,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   tagline: {
-    fontFamily: 'Inter_400Regular', fontSize: 15,
-    color: 'rgba(255,255,255,0.80)', textAlign: 'center',
-    lineHeight: 22, marginBottom: 24,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14.5,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  pillRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
-  pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+  featuresContainer: {
+    width: '100%',
+    paddingHorizontal: 24,
+    marginTop: 12,
   },
-  pillText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: 'rgba(255,255,255,0.9)' },
-  bottom: {
+  card: {
+    flexDirection: 'row',
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 28, paddingBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    elevation: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  bottomHeading: { fontFamily: 'Inter_700Bold', fontSize: 22, color: colors.textPrimary, marginBottom: 6 },
-  bottomSub: { lineHeight: 19, marginBottom: 24 },
-  buttonStack: { gap: 12 },
-  disclaimer: { textAlign: 'center', marginTop: 16, lineHeight: 17, fontSize: 11 },
+  cardIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  cardContent: {
+    flex: 1,
+  },
+  cardTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14.5,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  cardDescription: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  bottomContainer: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    width: '100%',
+  },
+  buttonStack: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  googlePrimary: {
+    backgroundColor: colors.primary,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  googlePrimaryPressed: {
+    backgroundColor: colors.primaryDark,
+  },
+  googlePrimaryLabel: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    letterSpacing: 0.1,
+  },
+  googleSecondary: {
+    backgroundColor: 'transparent',
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleSecondaryPressed: {
+    backgroundColor: colors.primaryLight,
+  },
+  googleSecondaryLabel: {
+    color: colors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    letterSpacing: 0.1,
+  },
+  disclaimer: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.primary,

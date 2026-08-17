@@ -11,6 +11,7 @@ import { typography } from '../../theme/typography';
 import { PrimaryButton, SecondaryButton } from '../../components/Button';
 import PasswordStrength from '../../components/PasswordStrength';
 import { useAuth, MIN_PASSWORD_SCORE, checkPasswordPolicy } from '../../context/AuthContext';
+import WaitingForApprovalModal from '../../components/Approval';
 
 type RolePillProps = {
   label: string;
@@ -56,6 +57,7 @@ export default function LoginScreen({ navigation }) {
   const [newPassword, setNewPassword]       = useState('');
   const [showNewPassword, setShowNewPass]   = useState(false);
   const [forgotDone, setForgotDone]         = useState(false);
+  const [showWaitingModal, setShowWaitingModal] = useState(false);
 
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
@@ -320,7 +322,12 @@ export default function LoginScreen({ navigation }) {
             </View>
           ) : null}
 
-          {error ? <ErrorBox message={error} /> : null}
+          {error ? (
+            <ErrorBox
+              message={error}
+              onOpenApprovalModal={() => setShowWaitingModal(true)}
+            />
+          ) : null}
 
           <Pressable onPress={openForgotPassword} style={styles.forgotBtn}>
             <Text style={styles.link}>Forgot password?</Text>
@@ -350,6 +357,14 @@ export default function LoginScreen({ navigation }) {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <WaitingForApprovalModal
+        visible={showWaitingModal}
+        onClose={() => setShowWaitingModal(false)}
+        rescuerName={role === 'rescuer' ? 'Rescuer Applicant' : 'Applicant'}
+        rescuerEmail={email || pendingEmail}
+        idType="Government / Barangay ID"
+      />
     </SafeAreaView>
   );
 }
@@ -366,7 +381,48 @@ function Header() {
   );
 }
 
-function ErrorBox({ message }: { message: string }) {
+function ErrorBox({
+  message,
+  onOpenApprovalModal,
+}: {
+  message: string;
+  onOpenApprovalModal?: () => void;
+}) {
+  const isPending = message.toLowerCase().includes('pending admin verification') || message.toLowerCase().includes('pending approval');
+
+  if (isPending) {
+    return (
+      <View style={[styles.errorBox, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+        <Ionicons name="hourglass-outline" size={18} color="#D97706" />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.errorText, { color: '#92400E', fontWeight: '600' }]}>
+            Approval Pending
+          </Text>
+          <Text style={[styles.errorText, { color: '#B45309', marginTop: 2 }]}>
+            {message}
+          </Text>
+          {onOpenApprovalModal ? (
+            <Pressable
+              onPress={onOpenApprovalModal}
+              style={{
+                marginTop: 8,
+                backgroundColor: '#D97706',
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                alignSelf: 'flex-start',
+              }}
+            >
+              <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>
+                View Approval Status
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.errorBox}>
       <Ionicons name="alert-circle-outline" size={16} color={colors.primary} />

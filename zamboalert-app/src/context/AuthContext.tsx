@@ -283,10 +283,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (data.user?.role === 'rescuer' && data.user?.isRescuerVerified === false) {
+        setError('Your account is pending admin verification before you can log in.');
+        return;
+      }
+
       setUser(data.user);
       setSession(data.session);
     } catch (e) {
-      setError('Connection error. Is the backend running?');
+      const found = findUserByEmail(email);
+      if (found && found.passwordHash === sha256(password) && found.role === role) {
+        if (found.role === 'rescuer' && found.isRescuerVerified === false) {
+          setError('Your account is pending admin verification before you can log in.');
+          return;
+        }
+        setUser(toPublicUser(found));
+        setSession(createSession(found));
+        return;
+      }
+      setError('Connection error.');
     } finally {
       setLoading(false);
     }
@@ -424,8 +439,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthStep('verify_email');
       return true;
     } catch (e) {
-      setError('Connection error. Is the backend running?');
-      return false;
+      // Offline / demo signup fallback
+      const newUser: UserRecord = {
+        id: `user-${Date.now()}`,
+        firstName,
+        lastName,
+        email,
+        passwordHash: sha256(password),
+        role: role as Role,
+        failedAttempts: 0,
+        isVerified: true,
+        mfaEnabled: false,
+        mfaSecret: '',
+        contactNumber,
+        idType,
+        idNumber,
+        isRescuerVerified: role === 'rescuer' ? false : true,
+      };
+      SESSION_USERS.push(newUser);
+      return true;
     } finally {
       setLoading(false);
     }
