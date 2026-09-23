@@ -5,10 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "splash": {
-      "backgroundColor": "#F6F7F9"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.zamboalert.citizen",

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, View } from 'react-native';
+import { Pressable, Text, StyleSheet, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
@@ -10,6 +10,7 @@ type PrimaryButtonProps = {
   onPress: () => void;
   disabled?: boolean;
   fullWidth?: boolean;
+  loading?: boolean;
 };
 
 type SecondaryButtonProps = {
@@ -24,20 +25,26 @@ type SOSButtonProps = {
   onPress: () => void;
 };
 
-export function PrimaryButton({ label, icon, onPress, disabled, fullWidth = true }: PrimaryButtonProps) {
+export function PrimaryButton({ label, icon, onPress, disabled, fullWidth = true, loading = false }: PrimaryButtonProps) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.primary,
         fullWidth && styles.fullWidth,
-        disabled && styles.disabled,
-        pressed && !disabled && { backgroundColor: colors.primaryDark },
+        (disabled || loading) && styles.disabled,
+        pressed && !disabled && !loading && { backgroundColor: colors.primaryDark },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" style={{ marginRight: 8 }} /> : null}
-      <Text style={styles.primaryLabel}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator color="#FFFFFF" size="small" />
+      ) : (
+        <>
+          {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" style={{ marginRight: 8 }} /> : null}
+          <Text style={styles.primaryLabel}>{label}</Text>
+        </>
+      )}
     </Pressable>
   );
 }

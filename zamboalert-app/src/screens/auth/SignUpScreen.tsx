@@ -138,11 +138,8 @@ export default function SignUpScreen({ navigation }) {
           ) : null}
 
           <View style={styles.submitRow}>
-            {loading
-              ? <ActivityIndicator color={colors.primary} size="large" />
-              : <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
-                  disabled={!firstName.trim() || !lastName.trim() || !contactNumber.trim() || !email.trim() || !password || !confirm} />
-            }
+            <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
+                disabled={!firstName.trim() || !lastName.trim() || !contactNumber.trim() || !email.trim() || !password || !confirm} loading={loading} />
           </View>
 
           <View style={styles.switchRow}>

@@ -334,11 +334,8 @@ export default function LoginScreen({ navigation }) {
           </Pressable>
 
           <View style={styles.submitRow}>
-            {loading
-              ? <ActivityIndicator color={colors.primary} size="large" />
-              : <PrimaryButton label="Log in" icon="log-in-outline" onPress={handleLogin}
-                  disabled={!email.trim() || !password || lockoutSeconds > 0} />
-            }
+            <PrimaryButton label="Log in" icon="log-in-outline" onPress={handleLogin}
+                disabled={!email.trim() || !password || lockoutSeconds > 0} loading={loading} />
           </View>
 
           <View style={styles.demoBox}>
