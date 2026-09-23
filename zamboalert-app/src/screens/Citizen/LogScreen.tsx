@@ -22,7 +22,6 @@ export default function LogScreen({ navigation }) {
       <Header
         statusLine={`${log.length} event${log.length === 1 ? '' : 's'} recorded`}
         statusDotColor={colors.statusUnknown}
-        onSettingsPress={() => navigation.navigate('Settings')}
       />
 
       <FlatList

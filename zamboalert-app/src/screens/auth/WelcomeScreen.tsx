@@ -165,10 +165,10 @@ export default function WelcomeScreen({ navigation }) {
 
             {/* Google-style Text Presentation */}
             <View style={styles.headerTextContainer}>
-              <Text style={styles.eyebrow}>Offline Emergency Network</Text>
               <Text style={styles.appName}>ZamboAlert</Text>
+              <Text style={styles.eyebrow}>Barangay Tumaga</Text>
               <Text style={styles.tagline}>
-                Decentralized emergency communication for Zamboanga City. Keep in touch with responders even when all networks and internet are completely down.
+                Decentralized emergency communication for Barangay Tumaga. Keep in touch with responders even when all networks and internet are completely down.
               </Text>
             </View>
 

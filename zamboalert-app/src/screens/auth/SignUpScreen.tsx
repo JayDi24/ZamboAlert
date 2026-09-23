@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image
+  KeyboardAvoidingView, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
@@ -32,7 +32,11 @@ type InputFieldProps = {
   onRightIconPress?: () => void;
 };
 
-export default function SignUpScreen({ navigation }) {
+type AuthNavigation = {
+  navigate: (screen: string, params?: Record<string, unknown>) => void;
+};
+
+export default function SignUpScreen({ navigation }: { navigation: AuthNavigation }) {
   const { signUp, loading, error, clearError } = useAuth();
   const [role, setRole]               = useState('citizen');
   const [firstName, setFirstName]     = useState('');
@@ -76,79 +80,80 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.backdropGlow} />
+      <View style={styles.backdropGlowSecondary} />
+      <View style={styles.headerWrap} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.authCard}>
+            <Text style={styles.kicker}>Create account</Text>
+            <Text style={styles.heading}>Join the network</Text>
+            <Text style={styles.sub}>
+              Tell us who you are so we can route you to the right experience.
+            </Text>
 
-          <View style={styles.logoRow}>
-            <Image
-              source={require('../../assets/zamboalert.png')}
-              style={styles.logoImage}
-            />
-            <Text style={typography.appTitle}>ZamboAlert</Text>
-          </View>
-
-          <Text style={styles.heading}>Create an account</Text>
-          <Text style={[typography.meta, styles.sub]}>
-            Tell us who you are so we can route you to the right experience.
-          </Text>
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>I am a</Text>
-          <View style={styles.roleRow}>
-            <RolePill label="Citizen" icon="person-outline" description="I need to send an SOS"   active={role === 'citizen'} onPress={() => { setRole('citizen');  handleChange(); }} />
-            <RolePill label="Rescuer" icon="shield-outline" description="I respond to emergencies" active={role === 'rescuer'} onPress={() => { setRole('rescuer'); handleChange(); }} />
-          </View>
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>First name</Text>
-          <InputField icon="person-outline" placeholder="John" value={firstName}
-            onChangeText={(t) => { setFirstName(t); handleChange(); }} autoCapitalize="words" />
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Last name</Text>
-          <InputField icon="person-outline" placeholder="Doe" value={lastName}
-            onChangeText={(t) => { setLastName(t); handleChange(); }} autoCapitalize="words" />
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Contact number</Text>
-          <InputField icon="call-outline" placeholder="Enter your number" value={contactNumber}
-            onChangeText={(t) => { setContactNumber(t); handleChange(); }} keyboardType="phone-pad" />
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Email</Text>
-          <InputField icon="mail-outline" placeholder="you@example.com" value={email}
-            onChangeText={(t) => { setEmail(t); handleChange(); }} keyboardType="email-address" />
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Password</Text>
-          <InputField icon="lock-closed-outline" placeholder="At least 8 characters" value={password}
-            onChangeText={(t) => { setPassword(t); handleChange(); }}
-            secureTextEntry={!showPassword}
-            rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
-            onRightIconPress={() => setShowPass(!showPassword)} />
-
-          <PasswordStrength password={password} />
-
-          <Text style={[typography.eyebrow, styles.fieldLabel]}>Confirm password</Text>
-          <InputField icon="lock-closed-outline" placeholder="Re-enter your password" value={confirm}
-            onChangeText={(t) => { setConfirm(t); handleChange(); }}
-            secureTextEntry={!showConfirm}
-            rightIcon={showConfirm ? 'eye-off-outline' : 'eye-outline'}
-            onRightIconPress={() => setShowConfirm(!showConfirm)} />
-
-          {combinedError ? (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={colors.primary} />
-              <Text style={styles.errorText}>{combinedError}</Text>
+            <Text style={[typography.eyebrow, styles.fieldLabel]}>I am a</Text>
+            <View style={styles.roleRow}>
+              <RolePill label="Citizen" icon="person-outline" description="I need to send an SOS" active={role === 'citizen'} onPress={() => { setRole('citizen'); handleChange(); }} />
+              <RolePill label="Rescuer" icon="shield-outline" description="I respond to emergencies" active={role === 'rescuer'} onPress={() => { setRole('rescuer'); handleChange(); }} />
             </View>
-          ) : null}
 
-          <View style={styles.submitRow}>
-            <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
+            <View style={styles.nameRow}>
+              <View style={styles.nameColumn}>
+                <Text style={[typography.eyebrow, styles.fieldLabel]}>First name</Text>
+                <InputField icon="person-outline" placeholder="John" value={firstName}
+                  onChangeText={(t) => { setFirstName(t); handleChange(); }} autoCapitalize="words" />
+              </View>
+              <View style={styles.nameColumn}>
+                <Text style={[typography.eyebrow, styles.fieldLabel]}>Last name</Text>
+                <InputField icon="person-outline" placeholder="Doe" value={lastName}
+                  onChangeText={(t) => { setLastName(t); handleChange(); }} autoCapitalize="words" />
+              </View>
+            </View>
+
+            <Text style={[typography.eyebrow, styles.fieldLabel]}>Contact number</Text>
+            <InputField icon="call-outline" placeholder="Enter your number" value={contactNumber}
+              onChangeText={(t) => { setContactNumber(t); handleChange(); }} keyboardType="phone-pad" />
+
+            <Text style={[typography.eyebrow, styles.fieldLabel]}>Email</Text>
+            <InputField icon="mail-outline" placeholder="you@example.com" value={email}
+              onChangeText={(t) => { setEmail(t); handleChange(); }} keyboardType="email-address" />
+
+            <Text style={[typography.eyebrow, styles.fieldLabel]}>Password</Text>
+            <InputField icon="lock-closed-outline" placeholder="At least 8 characters" value={password}
+              onChangeText={(t) => { setPassword(t); handleChange(); }}
+              secureTextEntry={!showPassword}
+              rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              onRightIconPress={() => setShowPass(!showPassword)} />
+
+            <PasswordStrength password={password} />
+
+            <Text style={[typography.eyebrow, styles.fieldLabel]}>Confirm password</Text>
+            <InputField icon="lock-closed-outline" placeholder="Re-enter your password" value={confirm}
+              onChangeText={(t) => { setConfirm(t); handleChange(); }}
+              secureTextEntry={!showConfirm}
+              rightIcon={showConfirm ? 'eye-off-outline' : 'eye-outline'}
+              onRightIconPress={() => setShowConfirm(!showConfirm)} />
+
+            {combinedError ? (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={colors.primary} />
+                <Text style={styles.errorText}>{combinedError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.submitRow}>
+              <PrimaryButton label="Create account" icon="checkmark-circle-outline" onPress={handleSignUp}
                 disabled={!firstName.trim() || !lastName.trim() || !contactNumber.trim() || !email.trim() || !password || !confirm} loading={loading} />
-          </View>
+            </View>
 
-          <View style={styles.switchRow}>
-            <Text style={typography.meta}>Already have an account? </Text>
-            <Pressable onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.link}>Log in</Text>
-            </Pressable>
+            <View style={styles.switchRow}>
+              <Text style={typography.meta}>Already have an account? </Text>
+              <Pressable onPress={() => navigation.navigate('Login')}>
+                <Text style={styles.link}>Log in</Text>
+              </Pressable>
+            </View>
           </View>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -185,30 +190,71 @@ function InputField({ icon, placeholder, value, onChangeText, secureTextEntry, k
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { flexGrow: 1, padding: 24, paddingTop: 12 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
-  logoChip: { width: 32, height: 32, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  logoImage: { width: 32, height: 32, resizeMode: 'contain' },
-  heading: { fontFamily: 'Inter_700Bold', fontSize: 26, color: colors.textPrimary },
-  sub: { marginTop: 4, marginBottom: 28, lineHeight: 19 },
-  fieldLabel: { marginBottom: 8 },
-  roleRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  rolePill: { flex: 1, alignItems: 'center', padding: 16, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, gap: 6, position: 'relative' },
+  safe: {
+    flex: 1,
+    backgroundColor: '#F4F2F1',
+  },
+  backdropGlow: {
+    position: 'absolute',
+    top: -120,
+    right: -60,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(224, 52, 43, 0.12)',
+  },
+  backdropGlowSecondary: {
+    position: 'absolute',
+    bottom: -90,
+    left: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(17, 17, 17, 0.04)',
+  },
+  headerWrap: { height: 8, zIndex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 32, paddingTop: 4, alignItems: 'center' },
+  authCard: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    borderWidth: 1,
+    borderColor: '#F0F1F3',
+    zIndex: 1,
+  },
+  kicker: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    color: colors.primary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  heading: { fontFamily: 'Inter_700Bold', fontSize: 30, color: colors.textPrimary, marginTop: 2 },
+  sub: { marginTop: 6, marginBottom: 18, lineHeight: 20, fontFamily: 'Inter_400Regular', fontSize: 13.5, color: colors.textSecondary },
+  fieldLabel: { marginBottom: 8, color: colors.textPrimary },
+  roleRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  rolePill: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.background, gap: 5, position: 'relative' },
   rolePillActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  rolePillIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.inactiveBg, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  rolePillIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F2F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   rolePillIconActive: { backgroundColor: 'rgba(224,52,43,0.15)' },
   rolePillText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.textSecondary },
   rolePillTextActive: { color: colors.primary },
   rolePillDesc: { fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 15 },
   checkmark: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  nameRow: { flexDirection: 'row', gap: 10 },
+  nameColumn: { flex: 1 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: colors.primaryLight, borderRadius: 10, padding: 12, marginBottom: 20 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 10 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAFAFB', borderRadius: 14, borderWidth: 1.5, borderColor: '#E7E8EB', paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14, gap: 10 },
   input: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary },
-  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(224,52,43,0.08)', borderRadius: 10, padding: 12, marginBottom: 8 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(224,52,43,0.08)', borderRadius: 12, padding: 12, marginBottom: 8 },
   errorText: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.primary, lineHeight: 18 },
-  submitRow: { marginTop: 8, marginBottom: 24 },
-  switchRow: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 16 },
+  submitRow: { marginTop: 8, marginBottom: 20 },
+  switchRow: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 10 },
   link: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.primary },
 });
 

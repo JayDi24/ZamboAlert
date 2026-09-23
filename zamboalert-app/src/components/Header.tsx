@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
@@ -12,7 +12,7 @@ export default function Header({ statusLine, statusDotColor = colors.primary, on
       <View style={styles.topRow}>
         <View style={styles.brandRow}>
           <View style={styles.logoChip}>
-            <Ionicons name="play" size={16} color={colors.textOnPrimary} />
+            <Image source={require('../assets/zamboalert.png')} style={styles.logoImage} />
           </View>
           <Text style={[typography.appTitle, styles.title]}>ZamboAlert</Text>
           <View style={styles.roleBadge}>
@@ -20,9 +20,11 @@ export default function Header({ statusLine, statusDotColor = colors.primary, on
           </View>
         </View>
 
-        <Pressable onPress={onSettingsPress} style={styles.settingsBtn} hitSlop={8}>
-          <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
-        </Pressable>
+        {onSettingsPress ? (
+          <Pressable onPress={onSettingsPress} style={styles.settingsBtn} hitSlop={8}>
+            <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
+          </Pressable>
+        ) : null}
       </View>
 
       {statusLine ? (
@@ -56,9 +58,17 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 9,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  logoImage: {
+    width: 28,
+    height: 28,
+    resizeMode: 'contain',
   },
   title: {
     marginLeft: 2,

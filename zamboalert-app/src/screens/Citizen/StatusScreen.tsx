@@ -17,7 +17,6 @@ export default function StatusScreen({ navigation }) {
       <Header
         statusLine={`${nearbyPods.length} pod${nearbyPods.length === 1 ? '' : 's'} detected`}
         statusDotColor={nearbyPods.length > 0 ? colors.success : colors.statusUnknown}
-        onSettingsPress={() => navigation.navigate('Settings')}
       />
 
       <ScrollView contentContainerStyle={styles.content}>

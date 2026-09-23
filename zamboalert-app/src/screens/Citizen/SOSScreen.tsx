@@ -1,10 +1,11 @@
 // src/screens/SOSScreen.tsx
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable,
+  View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Dimensions, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import Header from '../../components/Header';
@@ -75,6 +76,8 @@ export default function SOSScreen({ navigation }) {
     bluetoothOn, gpsLocked, nearbyPods,
     startBeacon, stopBeacon,
   } = useAppState();
+  const [photoProofUri, setPhotoProofUri] = React.useState<string | null>(null);
+  const [pendingDisaster, setPendingDisaster] = React.useState<Disaster | null>(null);
 
   const activeDisaster = DISASTERS.find((d) => d.id === disasterType);
 
@@ -82,15 +85,57 @@ export default function SOSScreen({ navigation }) {
     ? `Broadcasting · ${nearbyPods.length} pod${nearbyPods.length === 1 ? '' : 's'} in range`
     : 'Tap your emergency to send SOS instantly';
 
-  function handleTap(disaster: Disaster) {
-    if (sosActive) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    startBeacon(disaster.id);
+  async function capturePhotoProof() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return null;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return null;
+    return result.assets[0].uri;
   }
 
-  function handleStop() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-    stopBeacon();
+  async function handleTap(disaster: Disaster) {
+    if (sosActive) {
+      if (disasterType === disaster.id) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+        setPhotoProofUri(null);
+        setPendingDisaster(null);
+        stopBeacon();
+      }
+      return;
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setPendingDisaster(disaster);
+  }
+
+  async function handleSendPhoto() {
+    if (!pendingDisaster) return;
+
+    const proofUri = await capturePhotoProof();
+    if (proofUri) setPhotoProofUri(proofUri);
+    else setPhotoProofUri(null);
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    startBeacon(pendingDisaster.id);
+    setPendingDisaster(null);
+  }
+
+  function handleSendWithoutPhoto() {
+    if (!pendingDisaster) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    startBeacon(pendingDisaster.id);
+    setPendingDisaster(null);
+  }
+
+  function handleCancelSOS() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setPendingDisaster(null);
   }
 
   return (
@@ -98,7 +143,6 @@ export default function SOSScreen({ navigation }) {
       <Header
         statusLine={statusLine}
         statusDotColor={sosActive ? colors.primary : colors.statusUnknown}
-        onSettingsPress={() => navigation.navigate('Settings')}
       />
 
       {sosActive && activeDisaster && (
@@ -141,12 +185,37 @@ export default function SOSScreen({ navigation }) {
           })}
         </View>
 
-        {/* ── Active: stop button ───────────────────────────────────────── */}
-        {sosActive && (
-          <Pressable onPress={handleStop} style={styles.stopBtn}>
-            <Ionicons name="stop-circle-outline" size={20} color={colors.textOnPrimary} />
-            <Text style={styles.stopText}>Stop Broadcasting</Text>
+        <Modal
+          visible={Boolean(pendingDisaster) && !sosActive}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCancelSOS}
+        >
+          <Pressable style={styles.modalOverlay} onPress={handleCancelSOS}>
+            <Pressable style={styles.actionPanel} onPress={() => {}}>
+              <Text style={styles.actionTitle}>{pendingDisaster?.label || 'Emergency'} emergency</Text>
+              <Pressable onPress={handleSendPhoto} style={styles.primaryAction}>
+                <Ionicons name="camera-outline" size={18} color={colors.textOnPrimary} />
+                <Text style={styles.primaryActionText}>Send a photo</Text>
+              </Pressable>
+              <Pressable onPress={handleSendWithoutPhoto} style={styles.secondaryAction}>
+                <Ionicons name="send-outline" size={18} color={colors.textPrimary} />
+                <Text style={styles.secondaryActionText}>Send without photo</Text>
+              </Pressable>
+              <Pressable onPress={handleCancelSOS} style={styles.cancelAction}>
+                <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.cancelActionText}>Cancel</Text>
+              </Pressable>
+            </Pressable>
           </Pressable>
+        </Modal>
+
+        {photoProofUri && sosActive && (
+          <Card style={styles.proofCard}>
+            <Text style={[typography.eyebrow, { marginBottom: 8 }]}>Photo proof</Text>
+            <Image source={{ uri: photoProofUri }} style={styles.proofImage} />
+            <Text style={[typography.meta, { marginTop: 8 }]}>Emergency photo attached to current distress signal.</Text>
+          </Card>
         )}
 
         {/* ── Device status ─────────────────────────────────────────────── */}
@@ -163,6 +232,33 @@ export default function SOSScreen({ navigation }) {
 
 // ─── Disaster card ──────────────────────────────────────────────────────────
 function DisasterCard({ disaster, active, dimmed, onPress }: DisasterCardProps) {
+  const pulseScale = React.useRef(new Animated.Value(1)).current;
+  const pulseOpacity = React.useRef(new Animated.Value(0.25)).current;
+
+  React.useEffect(() => {
+    if (!active) {
+      pulseScale.setValue(1);
+      pulseOpacity.setValue(0.25);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(pulseScale, { toValue: 1.2, duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.1, duration: 700, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulseScale, { toValue: 1, duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.25, duration: 700, useNativeDriver: true }),
+        ]),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [active, pulseOpacity, pulseScale]);
+
   return (
     <Pressable
       onPress={onPress}
@@ -176,7 +272,19 @@ function DisasterCard({ disaster, active, dimmed, onPress }: DisasterCardProps) 
       ]}
     >
       {/* Live pulse ring when active */}
-      {active && <View style={[cardStyles.pulse, { borderColor: disaster.color }]} />}
+      {active && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            cardStyles.pulse,
+            {
+              borderColor: disaster.color,
+              opacity: pulseOpacity,
+              transform: [{ scale: pulseScale }],
+            },
+          ]}
+        />
+      )}
 
       <Ionicons
         name={disaster.icon}
@@ -196,9 +304,14 @@ function DisasterCard({ disaster, active, dimmed, onPress }: DisasterCardProps) 
   );
 }
 
+const screenWidth = Dimensions.get('window').width;
+
 const cardStyles = StyleSheet.create({
   card: {
-    width: '48%',
+    flexBasis: '48%',
+    flexGrow: 1,
+    minWidth: 140,
+    maxWidth: 220,
     aspectRatio: 1,
     borderRadius: 20,
     alignItems: 'center',
@@ -245,7 +358,6 @@ const cardStyles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 999,
     borderWidth: 2,
-    opacity: 0.25,
   },
 });
 
@@ -287,19 +399,95 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  stopBtn: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  actionPanel: {
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: '100%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  actionTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  primaryAction: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.textPrimary,
-    paddingVertical: 15,
-    borderRadius: 14,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+    width: '100%',
   },
-  stopText: {
-    color: colors.textOnPrimary,
+  primaryActionText: {
+    color: '#FFFFFF',
     fontFamily: 'Inter_700Bold',
     fontSize: 15,
+  },
+  secondaryAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FDECEC',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F5C5C5',
+    width: '100%',
+  },
+  secondaryActionText: {
+    color: colors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+  },
+  cancelAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: '100%',
+  },
+  cancelActionText: {
+    color: colors.textSecondary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
+  proofCard: {
+    gap: 8,
+  },
+  proofImage: {
+    width: '100%',
+    height: Math.min(screenWidth * 0.5, 220),
+    borderRadius: 12,
+    backgroundColor: colors.inactiveBg,
   },
 
   statusCard: {},
@@ -308,7 +496,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   statusRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, maxWidth: '65%' },
 });

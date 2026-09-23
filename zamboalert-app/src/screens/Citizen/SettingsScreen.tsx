@@ -37,7 +37,7 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <Header statusLine={null} onSettingsPress={() => {}} />
+      <Header statusLine={null} />
 
       <ScrollView contentContainerStyle={styles.content}>
 

@@ -286,7 +286,8 @@ export default function WaitingForApprovalModal({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    justifyContent: 'flex-start',
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
   },
   header: {
     flexDirection: 'row',
@@ -328,7 +329,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   scroll: {
-    padding: 24,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
   heroSection: {
     alignItems: 'center',
@@ -542,7 +545,9 @@ const styles = StyleSheet.create({
     color: '#92400E',
   },
   footer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
