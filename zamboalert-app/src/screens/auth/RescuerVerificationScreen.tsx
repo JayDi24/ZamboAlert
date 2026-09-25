@@ -495,7 +495,7 @@ export default function RescuerVerificationScreen({ navigation, route }) {
         }}
         rescuerName={
           route.params?.registrationData
-            ? `${route.params.registrationData.firstName} ${route.params.registrationData.lastName}`
+            ? [route.params.registrationData.firstName, route.params.registrationData.middleName, route.params.registrationData.lastName].filter(Boolean).join(' ')
             : 'Rescuer Applicant'
         }
         rescuerEmail={route.params?.registrationData?.email}
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   },
   photoPreview: { width: '100%', height: '100%' },
   photoOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.25)',
     justifyContent: 'flex-end',
     alignItems: 'flex-end',

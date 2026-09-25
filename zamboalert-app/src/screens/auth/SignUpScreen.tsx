@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable,
@@ -30,6 +30,10 @@ type InputFieldProps = {
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  autoCorrect?: boolean;
+  autoComplete?: any;
+  textContentType?: any;
+  maxLength?: number;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightIconPress?: () => void;
 };
@@ -42,6 +46,7 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
   const { signUp, loading, error, clearError } = useAuth();
   const [role, setRole]                   = useState<'citizen' | 'rescuer'>('citizen');
   const [firstName, setFirstName]         = useState('');
+  const [middleName, setMiddleName]       = useState('');
   const [lastName, setLastName]           = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail]                 = useState('');
@@ -59,23 +64,48 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
   }
 
   async function handleSignUp() {
+    const cleanFirstName = firstName.trim();
+    const cleanMiddleName = middleName.trim();
+    const cleanLastName = lastName.trim();
+    const cleanContact = contactNumber.trim();
+    const cleanEmail = email.trim();
+
     setLocalError('');
-    if (!firstName.trim()) { setLocalError('Please enter your first name.'); return; }
-    if (!lastName.trim()) { setLocalError('Please enter your last name.'); return; }
-    if (!contactNumber.trim()) { setLocalError('Please enter your contact number.'); return; }
-    if (contactNumber.trim().length < 7) { setLocalError('Please enter a valid contact number.'); return; }
-    if (!email.includes('@') || !email.includes('.')) { setLocalError('Please enter a valid email address.'); return; }
+    if (!cleanFirstName) { setLocalError('Please enter your first name.'); return; }
+    if (!cleanLastName) { setLocalError('Please enter your last name.'); return; }
+    if (!cleanContact) { setLocalError('Please enter your contact number.'); return; }
+    if (cleanContact.length < 7) { setLocalError('Please enter a valid contact number.'); return; }
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) { setLocalError('Please enter a valid email address.'); return; }
     if (checkPasswordPolicy(password).score < MIN_PASSWORD_SCORE) {
       setLocalError('Password must meet at least 4 of the 5 requirements below.');
       return;
     }
     if (password !== confirm) { setLocalError('Passwords do not match.'); return; }
 
-    const started = await signUp(firstName, lastName, email, password, role, contactNumber);
+    const started = await signUp(
+      cleanFirstName,
+      cleanLastName,
+      cleanEmail,
+      password,
+      role,
+      cleanContact,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      cleanMiddleName
+    );
     if (started) {
       if (role === 'rescuer') {
         navigation.navigate('RescuerVerification', {
-          registrationData: { firstName, lastName, email, role, contactNumber },
+          registrationData: {
+            firstName: cleanFirstName,
+            middleName: cleanMiddleName,
+            lastName: cleanLastName,
+            email: cleanEmail,
+            role,
+            contactNumber: cleanContact,
+          },
         });
       } else {
         navigation.navigate('Login');
@@ -138,29 +168,39 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
               />
             </View>
 
-            {/* Name 2-column row */}
-            <View style={styles.nameRow}>
-              <View style={styles.nameColumn}>
-                <InputField
-                  label="First Name"
-                  icon="person-outline"
-                  placeholder="Juan"
-                  value={firstName}
-                  onChangeText={(t) => { setFirstName(t); handleChange(); }}
-                  autoCapitalize="words"
-                />
-              </View>
-              <View style={styles.nameColumn}>
-                <InputField
-                  label="Last Name"
-                  icon="person-outline"
-                  placeholder="Dela Cruz"
-                  value={lastName}
-                  onChangeText={(t) => { setLastName(t); handleChange(); }}
-                  autoCapitalize="words"
-                />
-              </View>
-            </View>
+            {/* Name Fields */}
+            <InputField
+              label="First Name"
+              icon="person-outline"
+              placeholder="Juan"
+              value={firstName}
+              onChangeText={(t) => { setFirstName(t); handleChange(); }}
+              autoCapitalize="words"
+              autoCorrect={false}
+              autoComplete="name-given"
+            />
+
+            <InputField
+              label="Middle Name"
+              icon="person-outline"
+              placeholder="Protacio (Optional)"
+              value={middleName}
+              onChangeText={(t) => { setMiddleName(t); handleChange(); }}
+              autoCapitalize="words"
+              autoCorrect={false}
+              autoComplete="name-middle"
+            />
+
+            <InputField
+              label="Last Name"
+              icon="person-outline"
+              placeholder="Dela Cruz"
+              value={lastName}
+              onChangeText={(t) => { setLastName(t); handleChange(); }}
+              autoCapitalize="words"
+              autoCorrect={false}
+              autoComplete="name-family"
+            />
 
             <InputField
               label="Contact Number"
@@ -169,6 +209,10 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
               value={contactNumber}
               onChangeText={(t) => { setContactNumber(t); handleChange(); }}
               keyboardType="phone-pad"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="tel"
+              textContentType="telephoneNumber"
             />
 
             <InputField
@@ -178,6 +222,10 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
               value={email}
               onChangeText={(t) => { setEmail(t); handleChange(); }}
               keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
             />
 
             <InputField
@@ -187,6 +235,10 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
               value={password}
               onChangeText={(t) => { setPassword(t); handleChange(); }}
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
               rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
               onRightIconPress={() => setShowPass(!showPassword)}
             />
@@ -200,6 +252,10 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
               value={confirm}
               onChangeText={(t) => { setConfirm(t); handleChange(); }}
               secureTextEntry={!showConfirm}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
               rightIcon={showConfirm ? 'eye-off-outline' : 'eye-outline'}
               onRightIconPress={() => setShowConfirm(!showConfirm)}
             />
@@ -289,16 +345,24 @@ function InputField({
   onChangeText,
   secureTextEntry,
   keyboardType,
-  autoCapitalize,
+  autoCapitalize = 'none',
+  autoCorrect = false,
+  autoComplete,
+  textContentType,
+  maxLength,
   rightIcon,
   onRightIconPress,
 }: InputFieldProps) {
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   return (
     <View style={styles.inputGroup}>
       {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
-      <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
+      <Pressable
+        onPress={() => inputRef.current?.focus()}
+        style={[styles.inputWrap, focused && styles.inputWrapFocused]}
+      >
         <Ionicons
           name={icon}
           size={19}
@@ -306,6 +370,7 @@ function InputField({
           style={styles.inputLeadingIcon}
         />
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
@@ -313,8 +378,11 @@ function InputField({
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
-          autoCapitalize={autoCapitalize || 'none'}
-          autoCorrect={false}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
@@ -323,7 +391,7 @@ function InputField({
             <Ionicons name={rightIcon} size={19} color={colors.textSecondary} />
           </Pressable>
         ) : null}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -549,10 +617,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontFamily: 'Inter_400Regular',
     fontSize: 14.5,
     color: colors.textPrimary,
     height: '100%',
+    paddingVertical: 0,
   },
   rightIconPressable: {
     padding: 4,

@@ -101,6 +101,7 @@ type Role = 'citizen' | 'rescuer';
 type UserRecord = {
   id: string;
   firstName: string;
+  middleName?: string;
   lastName: string;
   email: string;
   passwordHash: string;
@@ -121,6 +122,7 @@ type UserRecord = {
 type PublicUser = {
   id: string;
   firstName: string;
+  middleName?: string;
   lastName: string;
   name: string;
   email: string;
@@ -159,7 +161,7 @@ type AuthContextType = {
   devCode: string | null;
 
   login: (email: string, password: string, role: string) => Promise<void>;
-  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string, idFrontUri?: string, idBackUri?: string) => Promise<boolean>;
+  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string, idFrontUri?: string, idBackUri?: string, middleName?: string) => Promise<boolean>;
   logout: () => void;
   updateUser: (updates: Partial<Pick<UserRecord, 'mfaEnabled' | 'mfaSecret'>>) => void;
 
@@ -211,11 +213,13 @@ function clearLockoutIfNeeded(user: UserRecord) {
 }
 
 function toPublicUser(u: UserRecord): PublicUser {
+  const nameParts = [u.firstName, u.middleName, u.lastName].filter(Boolean);
   return {
     id: u.id,
     firstName: u.firstName,
+    middleName: u.middleName,
     lastName: u.lastName,
-    name: `${u.firstName} ${u.lastName}`.trim(),
+    name: nameParts.join(' ').trim(),
     email: u.email,
     role: u.role,
     mfaEnabled: u.mfaEnabled,
@@ -399,7 +403,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     idType?: string,
     idNumber?: string,
     idFrontUri?: string,
-    idBackUri?: string
+    idBackUri?: string,
+    middleName?: string
   ): Promise<boolean> {
     setLoading(true);
     setError('');
@@ -415,6 +420,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firstName,
+          middleName,
           lastName,
           email,
           password,
@@ -443,6 +449,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newUser: UserRecord = {
         id: `user-${Date.now()}`,
         firstName,
+        middleName,
         lastName,
         email,
         passwordHash: sha256(password),

@@ -1,5 +1,5 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput,
   ScrollView, Pressable,
@@ -29,6 +29,10 @@ type InputFieldProps = {
   onChangeText: (text: string) => void;
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  autoCorrect?: boolean;
+  autoComplete?: any;
+  textContentType?: any;
   maxLength?: number;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightIconPress?: () => void;
@@ -68,8 +72,9 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
   useEffect(() => {
-    if (!email.trim()) { setLockoutSeconds(0); return; }
-    setLockoutSeconds(getLockoutSecondsRemaining(email));
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) { setLockoutSeconds(0); return; }
+    setLockoutSeconds(getLockoutSecondsRemaining(trimmedEmail));
   }, [email]);
 
   useEffect(() => {
@@ -81,25 +86,28 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
   function handleChange() { if (error) clearError(); }
 
   async function handleLogin() {
-    if (!email.trim() || !password || lockoutSeconds > 0) return;
-    await login(email, password, role);
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password || lockoutSeconds > 0) return;
+    await login(cleanEmail, password, role);
   }
 
   async function handleVerifyEmail() {
-    if (verifyCode.length !== 6) return;
-    const ok = await verifyEmailCode(verifyCode);
+    const cleanCode = verifyCode.trim();
+    if (cleanCode.length !== 6) return;
+    const ok = await verifyEmailCode(cleanCode);
     if (ok) setVerifyCode('');
   }
 
   async function handleVerifyMfa() {
-    if (mfaCode.length !== 6) return;
-    const ok = await verifyMfaCode(mfaCode);
+    const cleanCode = mfaCode.trim();
+    if (cleanCode.length !== 6) return;
+    const ok = await verifyMfaCode(cleanCode);
     if (ok) setMfaCode('');
   }
 
   function openForgotPassword() {
     clearError();
-    setForgotEmail(email);
+    setForgotEmail(email.trim());
     setForgotStep(1);
     setForgotDone(false);
     setForgotVisible(true);
@@ -116,14 +124,17 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
   }
 
   async function handleForgotRequest() {
-    if (!forgotEmail.trim()) return;
-    const ok = await requestPasswordReset(forgotEmail);
+    const cleanEmail = forgotEmail.trim();
+    if (!cleanEmail) return;
+    const ok = await requestPasswordReset(cleanEmail);
     if (ok) setForgotStep(2);
   }
 
   async function handleForgotReset() {
-    if (checkPasswordPolicy(newPassword).score < MIN_PASSWORD_SCORE || forgotCode.length !== 6) return;
-    const ok = await resetPassword(forgotEmail, forgotCode, newPassword);
+    const cleanEmail = forgotEmail.trim();
+    const cleanCode = forgotCode.trim();
+    if (checkPasswordPolicy(newPassword).score < MIN_PASSWORD_SCORE || cleanCode.length !== 6) return;
+    const ok = await resetPassword(cleanEmail, cleanCode, newPassword);
     if (ok) setForgotDone(true);
   }
 
@@ -309,6 +320,10 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
                     value={forgotEmail}
                     onChangeText={setForgotEmail}
                     keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
                   />
 
                   {error ? <ErrorBox message={error} /> : null}
@@ -345,6 +360,8 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
                     onChangeText={setForgotCode}
                     keyboardType="numeric"
                     maxLength={6}
+                    autoCapitalize="none"
+                    autoCorrect={false}
                   />
 
                   <InputField
@@ -354,6 +371,10 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
                     value={newPassword}
                     onChangeText={setNewPassword}
                     secureTextEntry={!showNewPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="new-password"
+                    textContentType="newPassword"
                     rightIcon={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
                     onRightIconPress={() => setShowNewPass(!showNewPassword)}
                   />
@@ -405,17 +426,9 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
           showsVerticalScrollIndicator={false}
           bounces={true}
         >
-          {/* Header Brand Badge */}
-          <View style={styles.brandHeader}>
-            <View style={styles.badgePill}>
-              <View style={styles.badgeDot} />
-              <Text style={styles.badgeText}>COMMUNITY EMERGENCY NETWORK</Text>
-            </View>
-          </View>
 
           <View style={styles.authCard}>
             <View style={styles.cardHeader}>
-              <Text style={styles.kicker}>SECURE ACCESS</Text>
               <Text style={styles.heading}>Welcome back</Text>
               <Text style={styles.sub}>
                 Sign in to stay connected and alert responders even during network outages.
@@ -449,6 +462,10 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
               value={email}
               onChangeText={(t) => { setEmail(t); handleChange(); }}
               keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
             />
 
             <InputField
@@ -458,6 +475,10 @@ export default function LoginScreen({ navigation }: { navigation: AuthNavigation
               value={password}
               onChangeText={(t) => { setPassword(t); handleChange(); }}
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
+              textContentType="password"
               rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
               onRightIconPress={() => setShowPass(!showPassword)}
             />
@@ -609,16 +630,24 @@ function InputField({
   onChangeText,
   secureTextEntry,
   keyboardType,
+  autoCapitalize = 'none',
+  autoCorrect = false,
+  autoComplete,
+  textContentType,
   maxLength,
   rightIcon,
   onRightIconPress,
 }: InputFieldProps) {
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   return (
     <View style={styles.inputGroup}>
       {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
-      <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
+      <Pressable
+        onPress={() => inputRef.current?.focus()}
+        style={[styles.inputWrap, focused && styles.inputWrapFocused]}
+      >
         <Ionicons
           name={icon}
           size={19}
@@ -626,6 +655,7 @@ function InputField({
           style={styles.inputLeadingIcon}
         />
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
@@ -633,9 +663,11 @@ function InputField({
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
           maxLength={maxLength}
-          autoCapitalize="none"
-          autoCorrect={false}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
@@ -644,7 +676,7 @@ function InputField({
             <Ionicons name={rightIcon} size={19} color={colors.textSecondary} />
           </Pressable>
         ) : null}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -879,10 +911,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontFamily: 'Inter_400Regular',
     fontSize: 14.5,
     color: colors.textPrimary,
     height: '100%',
+    paddingVertical: 0,
   },
   rightIconPressable: {
     padding: 4,

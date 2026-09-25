@@ -55,7 +55,7 @@ function MovingRedGradientBackground() {
   }, [driftX1, driftX2, driftY1, driftY2, glowOpacity]);
 
   return (
-    <Animated.View style={styles.backgroundLayer}>
+    <Animated.View style={styles.backgroundLayer} pointerEvents="none">
       <Animated.View
         style={[
           styles.glow,

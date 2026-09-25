@@ -218,7 +218,7 @@ export default function WelcomeScreen({ navigation }) {
         <Animated.View
           pointerEvents="none"
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             {
               backgroundColor: colors.primary,
               opacity: overlayOpacity,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',

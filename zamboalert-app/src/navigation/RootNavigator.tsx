@@ -24,7 +24,7 @@ import { MainTabNavigator as RescuerTabNavigator } from '../rescuer/navigation/M
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const TAB_ICONS = {
+const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   SOS:      { active: 'warning',   inactive: 'warning-outline' },
   Status:   { active: 'bluetooth', inactive: 'bluetooth-outline' },
   Log:      { active: 'time',      inactive: 'time-outline' },
