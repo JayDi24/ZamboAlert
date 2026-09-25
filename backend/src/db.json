@@ -1,0 +1,33 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "firstName": "Test",
+      "lastName": "Citizen",
+      "email": "citizen@test.com",
+      "passwordHash": "6c077d560b025b5f0918ae3646ae00cf7ae5eaef0ddd3e0babdaf11be96b0003",
+      "role": "citizen",
+      "failedAttempts": 0,
+      "isVerified": true,
+      "mfaEnabled": false,
+      "mfaSecret": "",
+      "contactNumber": "+639123456789"
+    },
+    {
+      "id": "2",
+      "firstName": "Test",
+      "lastName": "Rescuer",
+      "email": "rescuer@test.com",
+      "passwordHash": "6c077d560b025b5f0918ae3646ae00cf7ae5eaef0ddd3e0babdaf11be96b0003",
+      "role": "rescuer",
+      "failedAttempts": 0,
+      "isVerified": true,
+      "mfaEnabled": false,
+      "mfaSecret": "",
+      "contactNumber": "+639987654321",
+      "idType": "Barangay ID",
+      "idNumber": "BRGY-R01",
+      "isRescuerVerified": true
+    }
+  ]
+}
