@@ -1,6 +1,6 @@
-// App.js
-import React, { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, Animated, StyleSheet } from 'react-native';
+// App.tsx
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,67 +17,13 @@ import { AuthProvider } from './src/context/AuthContext';
 import { AppStateProvider } from './src/context/AppStateContext';
 import RootNavigator from './src/navigation/RootNavigator';
 
-function MovingRedGradientBackground() {
-  const driftX1 = useRef(new Animated.Value(-30)).current;
-  const driftY1 = useRef(new Animated.Value(-40)).current;
-  const driftX2 = useRef(new Animated.Value(80)).current;
-  const driftY2 = useRef(new Animated.Value(50)).current;
-  const glowOpacity = useRef(new Animated.Value(0.7)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(driftX1, { toValue: 75, duration: 9000, useNativeDriver: true }),
-          Animated.timing(driftX1, { toValue: -30, duration: 9000, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(driftY1, { toValue: 30, duration: 8000, useNativeDriver: true }),
-          Animated.timing(driftY1, { toValue: -40, duration: 8000, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(driftX2, { toValue: -25, duration: 11000, useNativeDriver: true }),
-          Animated.timing(driftX2, { toValue: 90, duration: 11000, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(driftY2, { toValue: 70, duration: 10000, useNativeDriver: true }),
-          Animated.timing(driftY2, { toValue: -10, duration: 10000, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(glowOpacity, { toValue: 0.95, duration: 3000, useNativeDriver: true }),
-          Animated.timing(glowOpacity, { toValue: 0.65, duration: 3000, useNativeDriver: true }),
-        ]),
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [driftX1, driftX2, driftY1, driftY2, glowOpacity]);
-
+function AmbientBackground() {
   return (
-    <Animated.View style={styles.backgroundLayer} pointerEvents="none">
-      <Animated.View
-        style={[
-          styles.glow,
-          styles.glowOne,
-          {
-            opacity: glowOpacity,
-            transform: [{ translateX: driftX1 }, { translateY: driftY1 }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.glow,
-          styles.glowTwo,
-          {
-            opacity: glowOpacity,
-            transform: [{ translateX: driftX2 }, { translateY: driftY2 }],
-          },
-        ]}
-      />
+    <View style={styles.backgroundLayer} pointerEvents="none">
+      <View style={[styles.glow, styles.glowOne]} />
+      <View style={[styles.glow, styles.glowTwo]} />
       <View style={styles.vignette} />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -91,8 +37,8 @@ export default function App() {
 
   if (!fontsLoaded) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }
@@ -104,7 +50,7 @@ export default function App() {
           <AppStateProvider>
             <StatusBar style="dark" />
             <View style={styles.appBackground}>
-              <MovingRedGradientBackground />
+              <AmbientBackground />
               <View style={styles.contentLayer}>
                 <RootNavigator />
               </View>
@@ -117,6 +63,12 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
   appShell: {
     flex: 1,
   },
@@ -125,7 +77,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff5f5',
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 244, 244, 0.88)',
   },
@@ -136,17 +88,17 @@ const styles = StyleSheet.create({
     borderRadius: 200,
   },
   glowOne: {
-    backgroundColor: 'rgba(255, 95, 95, 0.30)',
+    backgroundColor: 'rgba(255, 95, 95, 0.22)',
     left: -80,
     top: -40,
   },
   glowTwo: {
-    backgroundColor: 'rgba(255, 145, 145, 0.22)',
+    backgroundColor: 'rgba(255, 145, 145, 0.16)',
     right: -90,
     bottom: 80,
   },
   vignette: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   contentLayer: {
@@ -154,3 +106,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
 });
+

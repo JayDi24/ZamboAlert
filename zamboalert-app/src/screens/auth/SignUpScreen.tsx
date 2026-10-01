@@ -11,6 +11,7 @@ import { typography } from '../../theme/typography';
 import { PrimaryButton } from '../../components/Button';
 import PasswordStrength from '../../components/PasswordStrength';
 import { useAuth, MIN_PASSWORD_SCORE, checkPasswordPolicy } from '../../context/AuthContext';
+import { InputField } from './components/AuthComponents';
 
 type RoleCardProps = {
   label: string;
@@ -21,22 +22,6 @@ type RoleCardProps = {
   onPress: () => void;
 };
 
-type InputFieldProps = {
-  label?: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  placeholder: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  autoCorrect?: boolean;
-  autoComplete?: any;
-  textContentType?: any;
-  maxLength?: number;
-  rightIcon?: keyof typeof Ionicons.glyphMap;
-  onRightIconPress?: () => void;
-};
 
 type AuthNavigation = {
   navigate: (screen: string, params?: Record<string, unknown>) => void;
@@ -337,64 +322,6 @@ function RoleCard({
   );
 }
 
-function InputField({
-  label,
-  icon,
-  placeholder,
-  value,
-  onChangeText,
-  secureTextEntry,
-  keyboardType,
-  autoCapitalize = 'none',
-  autoCorrect = false,
-  autoComplete,
-  textContentType,
-  maxLength,
-  rightIcon,
-  onRightIconPress,
-}: InputFieldProps) {
-  const [focused, setFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
-
-  return (
-    <View style={styles.inputGroup}>
-      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
-      <Pressable
-        onPress={() => inputRef.current?.focus()}
-        style={[styles.inputWrap, focused && styles.inputWrapFocused]}
-      >
-        <Ionicons
-          name={icon}
-          size={19}
-          color={focused ? colors.primary : colors.textMuted}
-          style={styles.inputLeadingIcon}
-        />
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={secureTextEntry}
-          keyboardType={keyboardType}
-          autoCapitalize={autoCapitalize}
-          autoCorrect={autoCorrect}
-          autoComplete={autoComplete}
-          textContentType={textContentType}
-          maxLength={maxLength}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-        />
-        {rightIcon ? (
-          <Pressable onPress={onRightIconPress} hitSlop={10} style={styles.rightIconPressable}>
-            <Ionicons name={rightIcon} size={19} color={colors.textSecondary} />
-          </Pressable>
-        ) : null}
-      </Pressable>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   safe: {
