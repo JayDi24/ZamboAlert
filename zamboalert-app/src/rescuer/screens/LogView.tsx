@@ -213,7 +213,7 @@ export function LogView({
                       setSelectedVictimId(v.id);
                       setVictimLabel(v.label);
                       setVictimSituation(v.situation);
-                      setVictimDisaster(v.disasterType || '');
+                      setVictimDisaster((v.disasterType as any) || '');
                     }}
                     style={{
                       paddingHorizontal: 12,
@@ -276,7 +276,7 @@ export function LogView({
                 if (found) {
                   setSelectedVictimId(found.id);
                   setVictimSituation(found.situation);
-                  setVictimDisaster(found.disasterType || '');
+                  setVictimDisaster((found.disasterType as any) || '');
                 } else {
                   setSelectedVictimId('');
                 }

@@ -60,17 +60,10 @@ const DISASTERS: Disaster[] = [
     color: '#7C5C2E',
     bg: 'rgba(124,92,46,0.12)',
   },
-  {
-    id: 'fire',
-    label: 'Fire',
-    icon: 'flame-outline',
-    color: '#E0342B',
-    bg: 'rgba(224,52,43,0.12)',
-  },
 ];
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
-export default function SOSScreen({ navigation }) {
+export default function SOSScreen({ navigation }: any) {
   const {
     sosActive, disasterType,
     bluetoothOn, gpsLocked, nearbyPods,
@@ -170,19 +163,38 @@ export default function SOSScreen({ navigation }) {
 
         {/* ── Disaster grid ─────────────────────────────────────────────── */}
         <View style={styles.grid}>
-          {DISASTERS.map((d) => {
-            const isActive = sosActive && disasterType === d.id;
-            const isOther  = sosActive && disasterType !== d.id;
-            return (
-              <DisasterCard
-                key={d.id}
-                disaster={d}
-                active={isActive}
-                dimmed={isOther}
-                onPress={() => handleTap(d)}
-              />
-            );
-          })}
+          {/* Top row: Earthquake + Flood */}
+          <View style={styles.gridRow}>
+            {DISASTERS.slice(0, 2).map((d) => {
+              const isActive = sosActive && disasterType === d.id;
+              const isOther  = sosActive && disasterType !== d.id;
+              return (
+                <DisasterCard
+                  key={d.id}
+                  disaster={d}
+                  active={isActive}
+                  dimmed={isOther}
+                  onPress={() => handleTap(d)}
+                />
+              );
+            })}
+          </View>
+          {/* Bottom row: Landslide centered */}
+          <View style={styles.gridRowCenter}>
+            {DISASTERS.slice(2).map((d) => {
+              const isActive = sosActive && disasterType === d.id;
+              const isOther  = sosActive && disasterType !== d.id;
+              return (
+                <DisasterCard
+                  key={d.id}
+                  disaster={d}
+                  active={isActive}
+                  dimmed={isOther}
+                  onPress={() => handleTap(d)}
+                />
+              );
+            })}
+          </View>
         </View>
 
         <Modal
@@ -308,10 +320,7 @@ const screenWidth = Dimensions.get('window').width;
 
 const cardStyles = StyleSheet.create({
   card: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    minWidth: 140,
-    maxWidth: 220,
+    width: (screenWidth - 32 - 12) / 2,   // (screen - horizontal padding - gap) / 2
     aspectRatio: 1,
     borderRadius: 20,
     alignItems: 'center',
@@ -393,9 +402,16 @@ const styles = StyleSheet.create({
   headingSub: { lineHeight: 19 },
 
   grid: {
+    gap: 12,
+  },
+  gridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 12,
+  },
+  gridRowCenter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 12,
   },
 

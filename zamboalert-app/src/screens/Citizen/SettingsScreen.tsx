@@ -26,7 +26,7 @@ type PermissionRowProps = {
   isLast?: boolean;
 };
 
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuth();
 
   const [name, setName] = useState(user?.name || '');

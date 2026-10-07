@@ -5,7 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
-export default function Header({ statusLine, statusDotColor = colors.primary, onSettingsPress }) {
+type HeaderProps = {
+  statusLine?: string | null;
+  statusDotColor?: string;
+  onSettingsPress?: () => void;
+};
+
+export default function Header({ statusLine, statusDotColor = colors.primary, onSettingsPress }: HeaderProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]}>

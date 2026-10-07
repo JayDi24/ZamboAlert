@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff5f5',
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 244, 244, 0.88)',
   },
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     bottom: 80,
   },
   vignette: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   contentLayer: {

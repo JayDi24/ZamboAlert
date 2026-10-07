@@ -267,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role })
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/verify-email`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/verify-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail, code })
@@ -355,7 +355,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function resendVerificationCode() {
     if (!pendingEmail) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/resend-code`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/resend-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail })
@@ -373,7 +373,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      await delay(500);
       if (!code.trim() || code.trim().length !== 6) {
         setError('Please enter the 6-digit code from your authenticator.');
         return false;
@@ -415,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -474,7 +473,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/request-reset`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/request-reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -507,7 +506,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code, newPassword })
@@ -579,4 +578,14 @@ export function useAuth() {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const FETCH_TIMEOUT_MS = 5000; // 5 seconds – fail fast when backend is unreachable
+
+function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
 }

@@ -14,7 +14,7 @@ const ICONS = {
   info: { name: 'information-circle', color: colors.statusUnknown },
 } as const;
 
-export default function LogScreen({ navigation }) {
+export default function LogScreen({ navigation }: any) {
   const { log } = useAppState();
 
   return (

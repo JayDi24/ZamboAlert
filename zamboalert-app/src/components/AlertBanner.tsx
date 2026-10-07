@@ -4,7 +4,12 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
-export default function AlertBanner({ message, onPress }) {
+type AlertBannerProps = {
+  message?: string;
+  onPress?: () => void;
+};
+
+export default function AlertBanner({ message, onPress }: AlertBannerProps) {
   if (!message) return null;
 
   return (

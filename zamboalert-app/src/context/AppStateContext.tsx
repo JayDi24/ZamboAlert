@@ -1,3 +1,4 @@
+
 // src/context/AppStateContext.tsx
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import * as Location from 'expo-location';

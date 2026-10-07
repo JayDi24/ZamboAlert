@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
 import { typography, fontFamily } from '../../theme/typography';
 import WaitingForApprovalModal from '../../components/Approval';
+import { API_BASE_URL } from '../../config';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ function TipCard({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: s
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
-export default function RescuerVerificationScreen({ navigation, route }) {
+export default function RescuerVerificationScreen({ navigation, route }: any) {
   const [step, setStep] = useState(0);
   const [idType, setIdType] = useState('Barangay ID');
   const [idNumber, setIdNumber] = useState('');
@@ -258,10 +259,64 @@ export default function RescuerVerificationScreen({ navigation, route }) {
       Alert.alert('Back Photo Required', 'Please upload or capture the back side of your ID.');
       return;
     }
+
+    const email = route.params?.registrationData?.email;
+    if (!email) {
+      Alert.alert('Session Error', 'Could not find your account email. Please go back and try again.');
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise(res => setTimeout(res, 1200));
-    setSubmitting(false);
-    setShowWaitingModal(true);
+    try {
+      // ── Step 1: Save to primary mobile app backend (port 3000) ───────────
+      const response = await fetch(`${API_BASE_URL}/api/auth/rescuer-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          idType,
+          idNumber: idNumber.trim(),
+          idFrontUri,
+          idBackUri,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Submission Failed', data.error || 'Something went wrong. Please try again.');
+        return;
+      }
+
+      // ── Step 2: Also register to the web dashboard backend (port 5000) ───
+      // This makes the rescuer appear in the Barangay Admin Web at localhost:5173
+      const reg = route.params?.registrationData;
+      try {
+        const webDashboardUrl = API_BASE_URL.replace(':3000', ':5000');
+        await fetch(`${webDashboardUrl}/api/rescuers/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            first_name: reg?.firstName || '',
+            last_name: reg?.lastName || '',
+            phone_number: reg?.contactNumber || reg?.phone || '',
+            id_type: idType,
+            id_number: idNumber.trim(),
+          }),
+        });
+      } catch {
+        // Silent fail — web dashboard might not be running, primary backend already saved the data
+        console.warn('Web dashboard sync skipped (port 5000 not reachable).');
+      }
+
+      // ── Step 3: Show the waiting for approval modal ───────────────────────
+      setShowWaitingModal(true);
+    } catch (err) {
+      Alert.alert('Network Error', 'Could not connect to the server. Make sure the backend is running and try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const bothPhotosUploaded = !!idFrontUri && !!idBackUri;

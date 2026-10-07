@@ -9,7 +9,7 @@ import Card from '../../components/Card';
 import StatusDot from '../../components/StatusDot';
 import { useAppState } from '../../context/AppStateContext';
 
-export default function StatusScreen({ navigation }) {
+export default function StatusScreen({ navigation }: any) {
   const { sosActive, nearbyPods, coords, gpsLocked } = useAppState();
 
   return (

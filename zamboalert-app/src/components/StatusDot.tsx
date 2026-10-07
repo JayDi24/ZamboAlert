@@ -3,7 +3,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { typography } from '../theme/typography';
 
-export default function StatusDot({ color, label, size = 10 }) {
+type StatusDotProps = {
+  color: string;
+  label?: string;
+  size?: number;
+};
+
+export default function StatusDot({ color, label, size = 10 }: StatusDotProps) {
   return (
     <View style={styles.row}>
       <View style={[styles.dot, { backgroundColor: color, width: size, height: size, borderRadius: size / 2 }]} />

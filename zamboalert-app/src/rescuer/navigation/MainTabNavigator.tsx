@@ -57,7 +57,7 @@ export function MainTabNavigator() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [selectedVictim, setSelectedVictim] = useState(VICTIMS[0].id);
 
-  const [victimsList, setVictimsList] = useState(VICTIMS);
+  const [victimsList, setVictimsList] = useState<any[]>(VICTIMS);
   const [updateModalVictimId, setUpdateModalVictimId] = useState<string | null>(null);
   const [logs, setLogs] = useState(LOG);
   const [rescuerEmergency, setRescuerEmergency] = useState<"trapped" | "injured" | null>(null);
@@ -296,7 +296,7 @@ export function MainTabNavigator() {
                 bearing: Math.floor(Math.random() * 360),
                 floor: 0,
                 signalStrength: 75,
-                situation: situation || "safe",
+                situation: (situation || "safe") as any,
                 lastPing: "just now",
                 disasterType: disaster || "Flood",
               };

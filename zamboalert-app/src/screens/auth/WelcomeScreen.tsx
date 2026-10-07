@@ -8,7 +8,7 @@ import { typography } from '../../theme/typography';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function WelcomeScreen({ navigation }) {
+export default function WelcomeScreen({ navigation }: any) {
   const [targetLayout, setTargetLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const [layoutMeasured, setLayoutMeasured] = useState(false);
   const [animationStarted, setAnimationStarted] = useState(false);
