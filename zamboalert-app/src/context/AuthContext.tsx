@@ -61,10 +61,6 @@ function sha256(ascii: string): string {
   }).join("");
 }
 
-function generateCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 // ── Password policy (ported from teammate's Auth.tsx) ──────────────────────
 export type PasswordRequirements = {
   length: boolean;
@@ -109,7 +105,6 @@ type UserRecord = {
   failedAttempts: number;
   lockoutUntil?: number;
   isVerified: boolean;
-  emailVerificationCode?: string;
   passwordResetCode?: string;
   mfaEnabled: boolean;
   mfaSecret: string;
@@ -157,7 +152,7 @@ type AuthContextType = {
 
   authStep: AuthStep;
   pendingEmail: string;
-  // Shown inline as a "demo mode" hint since there's no real email/SMS backend.
+  // Used for the recovery-code demo; email verification codes are never returned here.
   devCode: string | null;
 
   login: (email: string, password: string, role: string) => Promise<void>;
@@ -166,7 +161,7 @@ type AuthContextType = {
   updateUser: (updates: Partial<Pick<UserRecord, 'mfaEnabled' | 'mfaSecret'>>) => void;
 
   verifyEmailCode: (code: string) => Promise<boolean>;
-  resendVerificationCode: () => void;
+  resendVerificationCode: () => Promise<boolean>;
 
   verifyMfaCode: (code: string) => Promise<boolean>;
   cancelPendingAuth: () => void;
@@ -305,7 +300,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(createSession(found));
         return;
       }
-      setError('Connection error.');
+      setError(
+        e instanceof Error && e.name === 'AbortError'
+          ? 'Login request timed out. Check your network and try again.'
+          : 'Connection error. Check that the backend is running and reachable.'
+      );
     } finally {
       setLoading(false);
     }
@@ -352,20 +351,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function resendVerificationCode() {
-    if (!pendingEmail) return;
+  async function resendVerificationCode(): Promise<boolean> {
+    if (!pendingEmail) return false;
+    setLoading(true);
+    setError('');
     try {
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/resend-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail })
       });
-      if (response.ok) {
-        const data = await response.json();
-        setDevCode(data.devCode);
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || 'Could not resend the verification email. Please try again.');
+        return false;
       }
-    } catch (e) {
-      console.error(e);
+      return true;
+    } catch {
+      setError('Connection error. Could not resend the verification email.');
+      return false;
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -439,31 +445,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const data = await response.json();
-      setDevCode(data.devCode);
+      setDevCode(null);
       setPendingEmail(data.email);
       setAuthStep('verify_email');
       return true;
-    } catch (e) {
-      // Offline / demo signup fallback
-      const newUser: UserRecord = {
-        id: `user-${Date.now()}`,
-        firstName,
-        middleName,
-        lastName,
-        email,
-        passwordHash: sha256(password),
-        role: role as Role,
-        failedAttempts: 0,
-        isVerified: true,
-        mfaEnabled: false,
-        mfaSecret: '',
-        contactNumber,
-        idType,
-        idNumber,
-        isRescuerVerified: role === 'rescuer' ? false : true,
-      };
-      SESSION_USERS.push(newUser);
-      return true;
+    } catch {
+      setError('Connection error. Is the backend running?');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -580,7 +568,7 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const FETCH_TIMEOUT_MS = 5000; // 5 seconds – fail fast when backend is unreachable
+const FETCH_TIMEOUT_MS = 30000;
 
 function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
   const controller = new AbortController();

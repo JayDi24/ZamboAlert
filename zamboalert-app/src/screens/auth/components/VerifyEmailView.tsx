@@ -17,7 +17,7 @@ interface VerifyEmailViewProps {
   error: string;
   loading: boolean;
   onVerify: (code: string) => Promise<boolean>;
-  onResendCode: () => void;
+  onResendCode: () => Promise<boolean>;
   onCancel: () => void;
 }
 
@@ -31,12 +31,18 @@ export function VerifyEmailView({
   onCancel,
 }: VerifyEmailViewProps) {
   const [verifyCode, setVerifyCode] = useState('');
+  const [resendMessage, setResendMessage] = useState('');
 
   async function handleVerify() {
     const cleanCode = verifyCode.trim();
     if (cleanCode.length !== 6) return;
     const ok = await onVerify(cleanCode);
     if (ok) setVerifyCode('');
+  }
+
+  async function handleResend() {
+    const sent = await onResendCode();
+    setResendMessage(sent ? 'A new verification code was sent to your inbox.' : '');
   }
 
   return (
@@ -51,6 +57,7 @@ export function VerifyEmailView({
       <Text style={styles.sub}>
         We sent a 6-digit verification code to{'\n'}
         <Text style={styles.highlightText}>{pendingEmail || 'your email'}</Text>
+        {'\n'}Check your inbox and spam folder.
       </Text>
 
       {devCode ? <DevCodeHint code={devCode} /> : null}
@@ -60,12 +67,16 @@ export function VerifyEmailView({
         icon="key-outline"
         placeholder="Enter 6-digit code"
         value={verifyCode}
-        onChangeText={setVerifyCode}
+        onChangeText={(code) => {
+          setVerifyCode(code);
+          setResendMessage('');
+        }}
         keyboardType="numeric"
         maxLength={6}
       />
 
       {error ? <ErrorBox message={error} /> : null}
+      {resendMessage ? <Text style={styles.resendMessage}>{resendMessage}</Text> : null}
 
       <View style={styles.submitRow}>
         <PrimaryButton
@@ -77,9 +88,9 @@ export function VerifyEmailView({
         />
       </View>
 
-      <Pressable onPress={onResendCode} style={styles.resendBtn}>
-        <Ionicons name="refresh-outline" size={15} color={colors.primary} />
-        <Text style={styles.link}>Resend code</Text>
+      <Pressable onPress={handleResend} disabled={loading} style={styles.resendBtn}>
+        <Ionicons name="refresh-outline" size={15} color={loading ? colors.textMuted : colors.primary} />
+        <Text style={[styles.link, loading && { color: colors.textMuted }]}>Resend code</Text>
       </Pressable>
 
       <BackLink label="Back to Sign in" onPress={onCancel} />
@@ -134,5 +145,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
     color: colors.primary,
+  },
+  resendMessage: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: colors.success,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

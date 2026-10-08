@@ -83,7 +83,7 @@ export default function SOSScreen({ navigation }: any) {
     if (status !== 'granted') return null;
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType.Images,
       allowsEditing: true,
       quality: 0.8,
     });
@@ -163,25 +163,9 @@ export default function SOSScreen({ navigation }: any) {
 
         {/* ── Disaster grid ─────────────────────────────────────────────── */}
         <View style={styles.grid}>
-          {/* Top row: Earthquake + Flood */}
+          {/* Single horizontal row: Earthquake + Flash Flood + Landslide */}
           <View style={styles.gridRow}>
-            {DISASTERS.slice(0, 2).map((d) => {
-              const isActive = sosActive && disasterType === d.id;
-              const isOther  = sosActive && disasterType !== d.id;
-              return (
-                <DisasterCard
-                  key={d.id}
-                  disaster={d}
-                  active={isActive}
-                  dimmed={isOther}
-                  onPress={() => handleTap(d)}
-                />
-              );
-            })}
-          </View>
-          {/* Bottom row: Landslide centered */}
-          <View style={styles.gridRowCenter}>
-            {DISASTERS.slice(2).map((d) => {
+            {DISASTERS.map((d) => {
               const isActive = sosActive && disasterType === d.id;
               const isOther  = sosActive && disasterType !== d.id;
               return (
@@ -320,7 +304,7 @@ const screenWidth = Dimensions.get('window').width;
 
 const cardStyles = StyleSheet.create({
   card: {
-    width: (screenWidth - 32 - 12) / 2,   // (screen - horizontal padding - gap) / 2
+    width: (screenWidth - 32 - 24) / 3,   // (screen - horizontal padding - 2 gaps) / 3
     aspectRatio: 1,
     borderRadius: 20,
     alignItems: 'center',
@@ -407,11 +391,6 @@ const styles = StyleSheet.create({
   gridRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-  },
-  gridRowCenter: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     gap: 12,
   },
 

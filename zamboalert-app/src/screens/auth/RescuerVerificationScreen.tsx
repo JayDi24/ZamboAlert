@@ -208,7 +208,7 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
     }
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsEditing: true,
         aspect: [16, 10],
         quality: 0.7,
@@ -231,7 +231,7 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
     }
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsEditing: true,
         aspect: [16, 10],
         quality: 0.7,

@@ -56,4 +56,4 @@ src/
 ## Notes
 - BLE broadcasting is currently **mocked/simulated** — real BLE advertising requires a custom dev build (not Expo Go)
 - The rescuer dashboard is under development — rescuer accounts show a placeholder screen
-- All auth is in-memory mock only — connect to a real backend (Firebase / Supabase) for production
+- Authentication uses the sibling `backend` service. Configure its Gmail SMTP environment variables to enable signup and login email verification; see `../backend/README.md`.

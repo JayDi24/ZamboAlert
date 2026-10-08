@@ -8,9 +8,9 @@ import {
   Animated,
   ActivityIndicator,
   ScrollView,
-  SafeAreaView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography, fontFamily } from '../theme/typography';
