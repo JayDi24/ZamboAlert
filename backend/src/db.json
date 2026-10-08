@@ -28,6 +28,32 @@
       "idType": "Barangay ID",
       "idNumber": "BRGY-R01",
       "isRescuerVerified": true
+    },
+    {
+      "id": "1791445487782",
+      "firstName": "John Paul",
+      "lastName": "Enriquez",
+      "email": "enriquezjohnpaul908@gmail.com",
+      "passwordHash": "9df0b46eb4c603906d2a05743f21f62f4203eaa56ae1bd6a66b4d49057f25066",
+      "role": "citizen",
+      "failedAttempts": 0,
+      "isVerified": true,
+      "mfaEnabled": false,
+      "mfaSecret": "",
+      "contactNumber": "09556980196"
+    },
+    {
+      "id": "1791446364397",
+      "firstName": "Xoshi",
+      "lastName": "fukanawa",
+      "email": "xoshikafukanawa@gmail.com",
+      "passwordHash": "573fcb980a4529f26d9236df02da911f3a949e74ca57383b24e0258ff775965f",
+      "role": "citizen",
+      "failedAttempts": 0,
+      "isVerified": true,
+      "mfaEnabled": false,
+      "mfaSecret": "",
+      "contactNumber": "09318376233"
     }
   ]
 }

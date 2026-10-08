@@ -1,8 +1,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const app = express();
 const PORT = 3000;
+const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
 
 // Path to JSON database
 const DB_PATH = path.join(__dirname, 'db.json');
@@ -44,6 +47,7 @@ function writeDB(data) {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
   } catch (error) {
     console.error('Error writing DB:', error);
+    throw error;
   }
 }
 
@@ -106,13 +110,37 @@ function sha256(ascii) {
 }
 
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+async function sendVerificationEmail(email, code) {
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '');
+  if (!gmailUser || !gmailAppPassword) {
+    throw new Error('GMAIL_USER and GMAIL_APP_PASSWORD must be configured.');
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: gmailUser, pass: gmailAppPassword },
+    connectionTimeout: 7000,
+    greetingTimeout: 7000,
+    socketTimeout: 12000
+  });
+
+  await transporter.sendMail({
+    from: `"ZamboAlert" <${gmailUser}>`,
+    to: email,
+    subject: 'Your ZamboAlert verification code',
+    text: `Your ZamboAlert email verification code is ${code}. It expires in 10 minutes. If you did not create this account, you can ignore this email.`,
+    html: `<p>Your ZamboAlert email verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not create this account, you can ignore this email.</p>`
+  });
 }
 
 // ── Authentication API Routes ────────────────────────────────────────────────
 
 // SignUp Endpoint
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { firstName, lastName, email, password, role, contactNumber, idType, idNumber, idFrontUri, idBackUri } = req.body;
   
   if (!firstName || !lastName || !email || !password || !role || !contactNumber) {
@@ -126,6 +154,7 @@ app.post('/api/auth/signup', (req, res) => {
     return res.status(400).json({ error: 'An account with this email already exists. Try logging in.' });
   }
 
+  const code = generateCode();
   const newUser = {
     id: String(Date.now()),
     firstName: firstName.trim(),
@@ -138,7 +167,8 @@ app.post('/api/auth/signup', (req, res) => {
     mfaEnabled: false,
     mfaSecret: '',
     contactNumber: contactNumber.trim(),
-    emailVerificationCode: generateCode(),
+    emailVerificationCodeHash: sha256(code),
+    emailVerificationExpiresAt: Date.now() + VERIFICATION_CODE_TTL_MS,
     idType: role === 'rescuer' ? idType : undefined,
     idNumber: role === 'rescuer' ? idNumber : undefined,
     isRescuerVerified: role === 'rescuer' ? false : undefined,
@@ -146,15 +176,22 @@ app.post('/api/auth/signup', (req, res) => {
     idBackUri: role === 'rescuer' ? idBackUri : undefined
   };
 
-  db.users.push(newUser);
-  writeDB(db);
+  try {
+    await sendVerificationEmail(newUser.email, code);
+  } catch (error) {
+    console.error('Failed to send signup verification email:', error.message);
+    return res.status(503).json({
+      error: 'We could not send a verification email. Please check the Gmail mailer configuration and try again.'
+    });
+  }
 
-  // Return the registration details and the mock verification code
-  return res.json({
-    success: true,
-    email: newUser.email,
-    devCode: newUser.emailVerificationCode
-  });
+  db.users.push(newUser);
+  try {
+    writeDB(db);
+  } catch (error) {
+    return res.status(500).json({ error: 'Could not create your account. Please try again.' });
+  }
+  return res.json({ success: true, email: newUser.email });
 });
 
 // Verify Email Code Endpoint
@@ -171,12 +208,21 @@ app.post('/api/auth/verify-email', (req, res) => {
     return res.status(404).json({ error: 'User account not found.' });
   }
 
-  if (user.emailVerificationCode !== code.trim()) {
+  const isExpired = !user.emailVerificationExpiresAt || user.emailVerificationExpiresAt <= Date.now();
+  const matchesCode = user.emailVerificationCodeHash
+    ? user.emailVerificationCodeHash === sha256(code.trim())
+    : user.emailVerificationCode === code.trim();
+  if (isExpired || !matchesCode) {
+    if (isExpired) {
+      return res.status(400).json({ error: 'That verification code has expired. Request a new code and try again.' });
+    }
     return res.status(400).json({ error: 'Incorrect verification code. Please try again.' });
   }
 
   user.isVerified = true;
   delete user.emailVerificationCode;
+  delete user.emailVerificationCodeHash;
+  delete user.emailVerificationExpiresAt;
   writeDB(db);
 
   // If the email is verified, and the user is either a citizen OR an already-approved rescuer, log them in automatically
@@ -223,7 +269,7 @@ app.post('/api/auth/verify-email', (req, res) => {
 });
 
 // Resend Verification Code Endpoint
-app.post('/api/auth/resend-code', (req, res) => {
+app.post('/api/auth/resend-code', async (req, res) => {
   const { email } = req.body;
   if (!email) {
     return res.status(400).json({ error: 'Email is required.' });
@@ -236,17 +282,33 @@ app.post('/api/auth/resend-code', (req, res) => {
     return res.status(404).json({ error: 'User account not found.' });
   }
 
-  user.emailVerificationCode = generateCode();
-  writeDB(db);
+  if (user.isVerified) {
+    return res.status(400).json({ error: 'This email address is already verified.' });
+  }
 
-  return res.json({
-    success: true,
-    devCode: user.emailVerificationCode
-  });
+  const code = generateCode();
+  user.emailVerificationCodeHash = sha256(code);
+  user.emailVerificationExpiresAt = Date.now() + VERIFICATION_CODE_TTL_MS;
+  delete user.emailVerificationCode;
+
+  try {
+    await sendVerificationEmail(user.email, code);
+  } catch (error) {
+    console.error('Failed to resend verification email:', error.message);
+    return res.status(503).json({
+      error: 'We could not send a verification email. Please try again later.'
+    });
+  }
+  try {
+    writeDB(db);
+  } catch (error) {
+    return res.status(500).json({ error: 'Could not update your verification request. Please try again.' });
+  }
+  return res.json({ success: true });
 });
 
 // Login Endpoint
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password, role } = req.body;
 
   if (!email || !password || !role) {
@@ -281,13 +343,24 @@ app.post('/api/auth/login', (req, res) => {
 
   // Email verification flow trigger
   if (!user.isVerified) {
-    user.emailVerificationCode = generateCode();
-    writeDB(db);
-    return res.json({
-      requiresVerification: true,
-      email: user.email,
-      devCode: user.emailVerificationCode
-    });
+    const code = generateCode();
+    user.emailVerificationCodeHash = sha256(code);
+    user.emailVerificationExpiresAt = Date.now() + VERIFICATION_CODE_TTL_MS;
+    delete user.emailVerificationCode;
+    try {
+      await sendVerificationEmail(user.email, code);
+    } catch (error) {
+      console.error('Failed to send login verification email:', error.message);
+      return res.status(503).json({
+        error: 'We could not send a verification email. Please try again later.'
+      });
+    }
+    try {
+      writeDB(db);
+    } catch (error) {
+      return res.status(500).json({ error: 'Could not update your account. Please try again.' });
+    }
+    return res.json({ requiresVerification: true, email: user.email });
   }
 
   writeDB(db);
@@ -370,6 +443,36 @@ app.post('/api/auth/reset-password', (req, res) => {
   return res.json({
     success: true,
     message: 'Password reset successfully.'
+  });
+});
+
+// Submit Rescuer Verification Documents Endpoint
+app.post('/api/auth/rescuer-verify', (req, res) => {
+  const { email, idType, idNumber, idFrontUri, idBackUri } = req.body;
+
+  if (!email || !idType || !idNumber) {
+    return res.status(400).json({ error: 'Email, ID type, and ID number are required.' });
+  }
+
+  const db = readDB();
+  const user = db.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase() && u.role === 'rescuer');
+
+  if (!user) {
+    return res.status(404).json({ error: 'Rescuer account not found.' });
+  }
+
+  // Save verification documents — status stays pending (false) until admin approves
+  user.idType = idType.trim();
+  user.idNumber = idNumber.trim();
+  user.idFrontUri = idFrontUri || '';
+  user.idBackUri = idBackUri || '';
+  user.isRescuerVerified = false;
+
+  writeDB(db);
+
+  return res.json({
+    success: true,
+    message: 'Verification documents submitted successfully. Awaiting admin approval.'
   });
 });
 
