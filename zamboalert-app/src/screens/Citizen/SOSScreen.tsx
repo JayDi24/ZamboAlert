@@ -66,7 +66,7 @@ const DISASTERS: Disaster[] = [
 export default function SOSScreen({ navigation }: any) {
   const {
     sosActive, disasterType,
-    bluetoothOn, gpsLocked, nearbyPods,
+    bluetoothOn, gpsLocked,
     startBeacon, stopBeacon,
   } = useAppState();
   const [photoProofUri, setPhotoProofUri] = React.useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function SOSScreen({ navigation }: any) {
   const activeDisaster = DISASTERS.find((d) => d.id === disasterType);
 
   const statusLine = sosActive
-    ? `Broadcasting · ${nearbyPods.length} pod${nearbyPods.length === 1 ? '' : 's'} in range`
+    ? 'SOS beacon broadcasting over Bluetooth'
     : 'Tap your emergency to send SOS instantly';
 
   async function capturePhotoProof() {
@@ -83,7 +83,7 @@ export default function SOSScreen({ navigation }: any) {
     if (status !== 'granted') return null;
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
     });
@@ -219,7 +219,7 @@ export default function SOSScreen({ navigation }: any) {
           <Text style={[typography.eyebrow, { marginBottom: 10 }]}>Device status</Text>
           <StatusRow icon="bluetooth"     label="Bluetooth"     value={bluetoothOn ? 'On' : 'Off'} ok={bluetoothOn} />
           <StatusRow icon="navigate"      label="GPS lock"      value={gpsLocked ? 'Locked' : 'Searching…'} ok={gpsLocked} />
-          <StatusRow icon="radio-outline" label="Pods in range" value={String(nearbyPods.length)} ok={nearbyPods.length > 0} isLast />
+          <StatusRow icon="radio-outline" label="SOS beacon" value={sosActive ? 'Broadcasting' : 'Standby'} ok={sosActive} isLast />
         </Card>
       </ScrollView>
     </View>

@@ -8,9 +8,10 @@
     "start:ip": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=192.168.254.117 expo start --lan",
     "tunnel": "expo start --tunnel -c",
     "clear": "expo start -c",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -28,6 +29,7 @@
     "lucide-react-native": "^1.23.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-ble-advertiser": "^0.0.17",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
@@ -39,6 +41,7 @@
     "@babel/core": "^7.25.0",
     "@expo/ngrok": "^4.1.3",
     "babel-preset-expo": "~57.0.12",
-    "cross-env": "^10.1.0"
+    "cross-env": "^10.1.0",
+    "patch-package": "^8.0.1"
   }
 }

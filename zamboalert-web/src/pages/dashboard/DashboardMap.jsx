@@ -197,6 +197,7 @@ export function TacticalMap({
   alerts = [],
   rescuers = [],
   casualties = [],
+  pods = [],
   selected,
   onSelect,
   selectedCasualtyId,
@@ -205,12 +206,13 @@ export function TacticalMap({
 }) {
   const [is3D, setIs3D] = useState(true);
   const [pitchAngle, setPitchAngle] = useState(58);
-  const [showDetectionWeb, setShowDetectionWeb] = useState(true);
+  const [showDetectionWeb, setShowDetectionWeb] = useState(false);
   const [isLegendOpen, setIsLegendOpen] = useState(true);
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const podMarkersRef = useRef([]);
 
   const mapboxToken =
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -755,6 +757,52 @@ export function TacticalMap({
     }
   }, [alerts, rescuers, casualties, selected, selectedCasualtyId, onSelect, onSelectCasualty, onDispatchToTarget]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    podMarkersRef.current.forEach((marker) => marker.remove());
+    podMarkersRef.current = [];
+    if (!map) return;
+
+    pods.forEach((pod) => {
+      if (!pod.fix || !Number.isFinite(pod.lat) || !Number.isFinite(pod.lng)) return;
+
+      const activeSos = pod.msgType === 1 || pod.bleVictims > 0;
+      const color = activeSos ? "#dc2626" : "#2563eb";
+      const el = document.createElement("div");
+      el.className = "relative flex flex-col items-center justify-center";
+      el.innerHTML = `
+        <div style="
+          display:flex;align-items:center;justify-content:center;
+          width:28px;height:28px;border-radius:9px;
+          background:${color};border:2px solid white;color:white;
+          font:bold 10px monospace;box-shadow:0 3px 10px rgba(15,23,42,.35)
+        ">${activeSos ? "SOS" : "POD"}</div>
+      `;
+      el.setAttribute("aria-label", `${activeSos ? "SOS " : ""}Pod ${pod.nodeId}`);
+
+      const popupContent = document.createElement("div");
+      popupContent.style.cssText = "font:11px sans-serif;line-height:1.6;padding:3px";
+      const title = document.createElement("strong");
+      title.textContent = `Pod ${pod.nodeId}`;
+      const details = document.createElement("div");
+      details.textContent = `${activeSos ? "SOS detected" : "Telemetry"} · ${pod.bleVictims} BLE victim(s)`;
+      const signal = document.createElement("div");
+      signal.textContent = `LoRa RSSI ${pod.loraRssi} dBm · ${pod.sats} satellites`;
+      popupContent.append(title, details, signal);
+
+      const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
+        .setLngLat([pod.lng, pod.lat])
+        .setPopup(new mapboxgl.Popup({ offset: 16, closeButton: false }).setDOMContent(popupContent))
+        .addTo(map);
+      podMarkersRef.current.push(marker);
+    });
+
+    return () => {
+      podMarkersRef.current.forEach((marker) => marker.remove());
+      podMarkersRef.current = [];
+    };
+  }, [pods]);
+
   // Controls Handlers
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
@@ -869,6 +917,12 @@ export function TacticalMap({
                 R
               </span>
               <span>Rescuer Unit</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[7px] font-bold">
+                POD
+              </span>
+              <span>LoRa Rescuer Pod</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[8px] font-bold">

@@ -20,11 +20,11 @@ export default function SettingsPage() {
   };
 
   const [profile, setProfile] = useState({
-    name: "Admin Juan dela Cruz",
-    email: "admin.tumaga@zamboalert.gov.ph",
-    role: "BDRRM Officer - Tumaga Command",
-    station: "Zone 4 Barangay Hall, Tumaga, Zamboanga City",
-    joinedDate: "July 15, 2025",
+    name: "",
+    email: "",
+    role: "",
+    station: "",
+    joinedDate: "",
   });
 
   const [rules, setRules] = useState({
@@ -50,7 +50,7 @@ export default function SettingsPage() {
 
   const handleProfileSave = (e) => {
     e.preventDefault();
-    showToast("Profile details updated successfully! (Mock)");
+    showToast("Profile updates are not connected to the backend yet.");
   };
 
   const handleSecuritySave = (e) => {
@@ -59,8 +59,7 @@ export default function SettingsPage() {
       alert("New password and confirm password do not match.");
       return;
     }
-    showToast("Security settings updated successfully! (Mock)");
-    setPasswords({ current: "", new: "", confirm: "" });
+    showToast("Password changes are not connected to the backend yet.");
   };
 
   const handleToggleRule = async (key) => {
@@ -292,17 +291,9 @@ export default function SettingsPage() {
 
   const [activitySearch, setActivitySearch] = useState("");
 
-  const mockActivityLogs = [
-    { id: "ACT-849", timestamp: "2026-07-10 09:42:15", operator: "Admin Juan", action: "Admin password change", detail: "Password successfully updated", status: "success", ip: "192.168.1.105" },
-    { id: "ACT-848", timestamp: "2026-07-10 08:15:30", operator: "Admin Juan", action: "Update geofence radius", detail: "Expanded boundary radius from 1000m to 1200m", status: "success", ip: "192.168.1.105" },
-    { id: "ACT-847", timestamp: "2026-07-09 18:22:11", operator: "Admin Juan", action: "Approved Rescuer Unit", detail: "Verified Registration request for 'Medic Unit 1'", status: "success", ip: "192.168.1.105" },
-    { id: "ACT-846", timestamp: "2026-07-09 16:54:02", operator: "Admin Juan", action: "Toggle Onboarding Rule", detail: "Enabled 'Require Administrator Approval' for new rescuers", status: "success", ip: "192.168.1.105" },
-    { id: "ACT-844", timestamp: "2026-07-08 11:05:44", operator: "Admin Juan", action: "Incident Dispatch", detail: "Dispatched Rescue Team Alpha to SOS #42 (Flood Alert, Zone 5)", status: "success", ip: "192.168.1.108" },
-    { id: "ACT-843", timestamp: "2026-07-08 10:55:12", operator: "Admin Juan", action: "Failed login attempt", detail: "Incorrect password for username: admin_juan", status: "failed", ip: "112.198.88.22" },
-    { id: "ACT-842", timestamp: "2026-07-07 14:12:09", operator: "Admin Juan", action: "Resigned Rescuer Removed", detail: "Archived account for Rescuer Unit 'Rescue Team Gamma'", status: "warning", ip: "192.168.1.105" },
-  ];
+  const activityLogs = [];
 
-  const filteredActivities = mockActivityLogs.filter((log) => {
+  const filteredActivities = activityLogs.filter((log) => {
     const matchesSearch =
       log.action.toLowerCase().includes(activitySearch.toLowerCase()) ||
       log.detail.toLowerCase().includes(activitySearch.toLowerCase()) ||
@@ -381,18 +372,9 @@ export default function SettingsPage() {
   const [rescuerSearch, setRescuerSearch] = useState("");
   const [rescuerFilter, setRescuerFilter] = useState("all");
 
-  const mockRescuerLogs = [
-    { id: "RL-501", timestamp: "2026-07-10 10:12:00", unit: "Rescue Team Alpha", type: "GPS Ping", battery: 94, signal: -58, status: "online", notes: "Coordinates [6.9220, 122.0800] - Stable link" },
-    { id: "RL-502", timestamp: "2026-07-10 10:09:44", unit: "Medic Unit 1", type: "Status Change", battery: 78, signal: -62, status: "online", notes: "Changed status to AVAILABLE" },
-    { id: "RL-503", timestamp: "2026-07-10 10:05:12", unit: "Rescue Team Beta", type: "Low Battery Warning", battery: 15, signal: -75, status: "warning", notes: "Critical battery: 15%. Charger recommended" },
-    { id: "RL-504", timestamp: "2026-07-10 09:59:30", unit: "Rescue Team Alpha", type: "SOS Dispatch", battery: 95, signal: -60, status: "busy", notes: "Accepted assignment for SOS alert #45" },
-    { id: "RL-505", timestamp: "2026-07-10 09:30:12", unit: "Medic Unit 1", type: "Network Reconnect", battery: 80, signal: -45, status: "online", notes: "Reconnected to Gateway GW-01" },
-    { id: "RL-506", timestamp: "2026-07-10 09:12:45", unit: "Rescue Team Beta", type: "GPS Ping", battery: 20, signal: -82, status: "warning", notes: "Weak signal detected from Zone 7 Boundary" },
-    { id: "RL-507", timestamp: "2026-07-10 08:45:00", unit: "Rescue Team Gamma", type: "Disconnect", battery: 52, signal: -98, status: "offline", notes: "Connection timed out. Last seen 15m ago" },
-    { id: "RL-508", timestamp: "2026-07-10 08:30:11", unit: "Medic Unit 1", type: "Registration Approval", battery: 100, signal: -52, status: "online", notes: "Successfully verified and onboarded to tactical dashboard" },
-  ];
+  const rescuerLogs = [];
 
-  const filteredRescuers = mockRescuerLogs.filter((log) => {
+  const filteredRescuers = rescuerLogs.filter((log) => {
     const matchesSearch =
       log.unit.toLowerCase().includes(rescuerSearch.toLowerCase()) ||
       log.notes.toLowerCase().includes(rescuerSearch.toLowerCase()) ||
@@ -486,8 +468,7 @@ export default function SettingsPage() {
                   activitySearch={activitySearch}
                   setActivitySearch={setActivitySearch}
                   filteredActivities={filteredActivities}
-                  mockActivityLogs={mockActivityLogs}
-                  showToast={showToast}
+                  activityLogs={activityLogs}
                 />
               )}
 
@@ -510,7 +491,6 @@ export default function SettingsPage() {
                   handleVerifyRescuer={handleVerifyRescuer}
                   handleRejectRescuer={handleRejectRescuer}
                   filteredRescuers={filteredRescuers}
-                  mockRescuerLogs={mockRescuerLogs}
                   selectedRescuerForReview={selectedRescuerForReview}
                   setSelectedRescuerForReview={setSelectedRescuerForReview}
                   showReviewModal={showReviewModal}

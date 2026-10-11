@@ -1,6 +1,6 @@
-import { RefreshCw, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
-export default function ActivityTab({ activitySearch, setActivitySearch, filteredActivities, mockActivityLogs, showToast }) {
+export default function ActivityTab({ activitySearch, setActivitySearch, filteredActivities, activityLogs }) {
   return (
     <div className="space-y-5 animate-in fade-in-30 duration-200 flex-grow flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -13,14 +13,7 @@ export default function ActivityTab({ activitySearch, setActivitySearch, filtere
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => showToast("Refreshing admin activity database... (Mock)")}
-          className="self-start sm:self-auto flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-[10px] font-bold tracking-wider uppercase rounded transition-colors shadow-xs cursor-pointer font-mono"
-        >
-          <RefreshCw size={10} />
-          Refresh
-        </button>
+        <span className="text-[10px] text-slate-400 font-mono">Activity feed not connected</span>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -73,7 +66,7 @@ export default function ActivityTab({ activitySearch, setActivitySearch, filtere
         </div>
       </div>
       <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono px-1">
-        <span>Showing {filteredActivities.length} logs of {mockActivityLogs.length} entries</span>
+        <span>Showing {filteredActivities.length} logs of {activityLogs.length} entries</span>
         <span>Database Engine: SQLite (Local Offline Cache)</span>
       </div>
     </div>

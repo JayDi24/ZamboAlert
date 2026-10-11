@@ -18,11 +18,27 @@ $env:GMAIL_USER = "your-sender@gmail.com"
 $env:GMAIL_APP_PASSWORD = "your-16-character-app-password"
 ```
 
-From the `backend` directory, install dependencies and start the server:
+## LoRa gateway telemetry
+
+The gateway posts reports to `POST /api/telemetry`; the dashboard reads recent
+reports from `GET /api/telemetry`. Configure a long random `GATEWAY_API_KEY` in
+the backend's private `.env` file and set the exact same value in
+`firmware/zamboalert-gateway/include/config.h`. The endpoint rejects missing or
+incorrect keys and keeps each pod's latest report for 90 seconds.
+
+The server listens on port `3000` by default and binds to the LAN so an ESP32
+can reach it. Set `PORT` in `.env` to override the port. For a local hardware
+test, set the gateway URL to
+`http://<backend-computer-LAN-IP>:3000/api/telemetry`, permit inbound traffic to
+that port on the trusted private network, and do not expose the shared-key HTTP
+endpoint to the public Internet.
+
+Create `.env` from [`backend/.env.example`](./.env.example), then install
+dependencies and start the server from the repository root:
 
 ```powershell
-npm install --workspaces=false
-node src\index.js
+npm --prefix backend install
+npm start
 ```
 
 Verification codes expire after 10 minutes. The backend stores only a SHA-256

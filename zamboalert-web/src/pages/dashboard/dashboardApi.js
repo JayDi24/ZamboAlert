@@ -1,4 +1,5 @@
-export const API_PORTS = [Number(import.meta.env.VITE_API_PORT || 5000), 5001, 5002, 5003, 5010];
+const configuredPort = Number(import.meta.env.VITE_API_PORT || 3000);
+export const API_PORTS = [...new Set([configuredPort, 3000, 5000, 5001, 5002, 5003, 5010])];
 
 export async function apiFetch(endpoint, options = {}) {
   const { headers, ...rest } = options;

@@ -3,12 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+require('dotenv').config();
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
 
 // Path to JSON database
-const DB_PATH = path.join(__dirname, 'db.json');
+const DB_PATH = process.env.ZAMBOALERT_DB_PATH || path.join(__dirname, 'db.json');
 
 // Middleware for parsing JSON and form bodies
 app.use(express.json());
@@ -17,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 // Custom CORS middleware to avoid cross-origin request issues from mobile devices/emulators
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Gateway-Key');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -50,6 +51,103 @@ function writeDB(data) {
     throw error;
   }
 }
+
+app.post('/api/telemetry', (req, res) => {
+  const expectedKey = process.env.GATEWAY_API_KEY || '';
+  const suppliedKey = req.get('X-Gateway-Key') || '';
+  const suppliedBuffer = Buffer.from(suppliedKey);
+  const expectedBuffer = Buffer.from(expectedKey);
+
+  if (!expectedKey) {
+    return res.status(503).json({ message: 'Gateway telemetry is not configured on this server.' });
+  }
+  if (suppliedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(suppliedBuffer, expectedBuffer)) {
+    return res.status(401).json({ message: 'Invalid gateway key.' });
+  }
+
+  const body = req.body || {};
+  const validNumber = (value, min, max) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
+  const nodeId = typeof body.nodeId === 'string' ? body.nodeId.toUpperCase() : '';
+  const gatewayId = typeof body.gatewayId === 'string' ? body.gatewayId : '';
+  const fix = body.fix === true;
+  const valid =
+    /^[0-9A-F]{1,8}$/.test(nodeId) &&
+    gatewayId.length > 0 &&
+    gatewayId.length <= 40 &&
+    Number.isInteger(body.seq) && body.seq >= 0 && body.seq <= 4294967295 &&
+    [0, 1].includes(body.msgType) &&
+    typeof body.fix === 'boolean' &&
+    (!fix || (validNumber(body.lat, -90, 90) && validNumber(body.lng, -180, 180))) &&
+    validNumber(body.gatewayLat, -90, 90) &&
+    validNumber(body.gatewayLng, -180, 180) &&
+    Number.isInteger(body.sats) && body.sats >= 0 && body.sats <= 255 &&
+    Number.isInteger(body.bleVictims) && body.bleVictims >= 0 && body.bleVictims <= 255 &&
+    Number.isInteger(body.nearestRssi) && body.nearestRssi >= -127 && body.nearestRssi <= 0 &&
+    typeof body.nearestVictimId === 'string' && /^[A-Za-z0-9_]{0,8}$/.test(body.nearestVictimId) &&
+    Number.isInteger(body.victimStatus) && body.victimStatus >= 0 && body.victimStatus <= 255 &&
+    Number.isInteger(body.hopCount) && body.hopCount >= 0 && body.hopCount <= 255 &&
+    Number.isInteger(body.uptime) && body.uptime >= 0 && body.uptime <= 4294967295 &&
+    Number.isInteger(body.loraRssi) && body.loraRssi >= -127 && body.loraRssi <= 0 &&
+    validNumber(body.loraSnr, -50, 50);
+
+  if (!valid) {
+    return res.status(400).json({ message: 'Invalid telemetry packet.' });
+  }
+
+  try {
+    const db = readDB();
+    const telemetry = Array.isArray(db.podTelemetry) ? db.podTelemetry : [];
+    const receivedAt = new Date().toISOString();
+    const report = {
+      nodeId,
+      gatewayId,
+      seq: body.seq,
+      msgType: body.msgType,
+      fix,
+      lat: fix ? body.lat : null,
+      lng: fix ? body.lng : null,
+      gatewayLat: body.gatewayLat,
+      gatewayLng: body.gatewayLng,
+      sats: body.sats,
+      bleVictims: body.bleVictims,
+      nearestRssi: body.nearestRssi,
+      nearestVictimId: body.nearestVictimId,
+      victimStatus: body.victimStatus,
+      hopCount: body.hopCount,
+      uptime: body.uptime,
+      loraRssi: body.loraRssi,
+      loraSnr: body.loraSnr,
+      receivedAt,
+    };
+    const existingIndex = telemetry.findIndex((item) => item.nodeId === nodeId);
+    if (existingIndex === -1) {
+      telemetry.push(report);
+    } else {
+      telemetry[existingIndex] = report;
+    }
+    db.podTelemetry = telemetry;
+    writeDB(db);
+    return res.status(202).json({ message: 'Telemetry received.', nodeId });
+  } catch (error) {
+    console.error('Failed to store gateway telemetry:', error.message);
+    return res.status(500).json({ message: 'Failed to store gateway telemetry.' });
+  }
+});
+
+app.get('/api/telemetry', (req, res) => {
+  const cutoff = Date.now() - 90 * 1000;
+  const telemetry = readDB().podTelemetry;
+  const reports = Array.isArray(telemetry) ? telemetry : [];
+  return res.json(
+    reports
+      .filter((report) => {
+        const receivedAt = Date.parse(report.receivedAt);
+        return Number.isFinite(receivedAt) && receivedAt >= cutoff;
+      })
+      .sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt)),
+  );
+});
 
 // ── Custom SHA-256 Hashing Algorithm ─────────────────────────────────────────
 function sha256(ascii) {
@@ -549,6 +647,6 @@ app.get('/api/admin/stats', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running smoothly at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running smoothly at http://0.0.0.0:${PORT}`);
 });

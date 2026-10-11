@@ -42,6 +42,7 @@ export default function DashboardPage() {
         casualtyLogs={dashboard.casualtyLogs}
         households={dashboard.households}
         incidents={dashboard.incidents}
+        pods={dashboard.pods}
         selectedAlert={dashboard.selectedAlert}
         setSelectedAlert={dashboard.setSelectedAlert}
         selectedCasualtyId={dashboard.selectedCasualtyId}

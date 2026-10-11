@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 import PersonnelPage from "../personnel-alert/PersonnelAlertPage";
 import SettingsPage from "../settings/SettingsPage";
-import { MESH_NODES, fmtTime } from "./dashboardData";
-import { TacticalMap, SignalBars, PingDot, StatusBadge, RescuerBadge } from "./DashboardMap";
+import { fmtTime } from "./dashboardData";
+import { TacticalMap, PingDot, StatusBadge, RescuerBadge } from "./DashboardMap";
 import {
   AutoCallZcdrrmoModal,
   BroadcastModal,
@@ -30,6 +30,7 @@ export default function DashboardContent({
   casualtyLogs,
   households,
   incidents,
+  pods = [],
   selectedAlert,
   setSelectedAlert,
   selectedCasualtyId,
@@ -165,8 +166,8 @@ export default function DashboardContent({
           </div>
           <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
             <span className="inline-flex items-center gap-1.5">
-              <PingDot active />
-              Active mesh
+              <PingDot active={pods.length > 0} />
+              {pods.length > 0 ? `${pods.length} live pod${pods.length === 1 ? "" : "s"}` : "Waiting for live telemetry"}
             </span>
           </div>
         </div>
@@ -177,6 +178,7 @@ export default function DashboardContent({
             alerts={alerts}
             rescuers={rescuers}
             casualties={casualtyLogs}
+            pods={pods}
             selected={selectedAlert}
             onSelect={(id) => {
               setSelectedAlert((previous) => (previous === id ? null : id));
@@ -230,28 +232,7 @@ export default function DashboardContent({
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-          {MESH_NODES.map((node) => (
-            <div key={node.id} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800">{node.label}</span>
-                <div className="flex items-center gap-1.5">
-                  <PingDot active={node.online} />
-                  <span className="text-[10px] font-mono uppercase font-bold text-slate-600">
-                    {node.online ? "Online" : "Offline"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                <span>
-                  {node.id} ({node.type})
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <SignalBars bars={node.signalDbm > -60 ? 4 : node.signalDbm > -70 ? 3 : node.signalDbm > -80 ? 2 : 1} active={node.online} />
-                  <span>{node.signalDbm} dBm</span>
-                </div>
-              </div>
-            </div>
-          ))}
+          <p className="p-3 text-xs text-slate-400 italic">No live mesh relays detected.</p>
         </div>
       </aside>
     </>
@@ -406,7 +387,18 @@ export default function DashboardContent({
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
         <StatCard label="Recorded Events" value={incidents.length} tone="slate" />
-        <StatCard label="Avg Response" value="12.4m" tone="emerald" />
+        <StatCard
+          label="Avg Response"
+          value={
+            incidents.length
+              ? `${(
+                  incidents.reduce((total, item) => total + (Number(item.avg_response_time_mins) || 0), 0) /
+                  incidents.length
+                ).toFixed(1)}m`
+              : "--"
+          }
+          tone="emerald"
+        />
         <StatCard label="Total Rescued" value={incidents.reduce((sum, item) => sum + (item.total_rescued || 0), 0)} tone="sky" />
         <StatCard label="Casualties" value={incidents.reduce((sum, item) => sum + (item.casualties_count || 0), 0)} tone="purple" />
       </div>

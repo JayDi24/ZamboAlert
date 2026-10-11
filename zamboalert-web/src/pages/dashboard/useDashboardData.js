@@ -38,6 +38,7 @@ export function useDashboardData() {
 
   const [incidents, setIncidents] = useState([]);
   const [isFetchingIncidents, setIsFetchingIncidents] = useState(false);
+  const [pods, setPods] = useState([]);
 
   const [isFetchingRescuers, setIsFetchingRescuers] = useState(false);
   const [flashCount, setFlashCount] = useState(0);
@@ -168,11 +169,22 @@ export function useDashboardData() {
     }
   };
 
+  const fetchPods = async () => {
+    try {
+      const response = await apiFetch("/api/telemetry");
+      if (!response.ok) throw new Error(`Pod telemetry request failed: ${response.status}`);
+      setPods(await response.json());
+    } catch (error) {
+      console.error("Failed to fetch pod telemetry", error);
+    }
+  };
+
   useEffect(() => {
     fetchCasualtyLogs();
     fetchRescuers();
     fetchHouseholds();
     fetchIncidents();
+    fetchPods();
 
     const interval = setInterval(() => {
       fetchCasualtyLogs();
@@ -181,6 +193,11 @@ export function useDashboardData() {
       fetchIncidents();
     }, 12000);
 
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(fetchPods, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -262,6 +279,7 @@ export function useDashboardData() {
     setHouseholds,
     incidents,
     setIncidents,
+    pods,
     selectedAlert,
     setSelectedAlert,
     selectedCasualtyId,

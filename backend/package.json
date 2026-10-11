@@ -7,12 +7,11 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "node src/index.js"
-  },
-  "scripts": {
+    "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "nodemailer": "^7.0.3"
   }

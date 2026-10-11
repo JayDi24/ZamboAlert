@@ -33,7 +33,6 @@ export default function RescuersTab({
   handleVerifyRescuer,
   handleRejectRescuer,
   filteredRescuers,
-  mockRescuerLogs,
   selectedRescuerForReview,
   setSelectedRescuerForReview,
   showReviewModal,
@@ -323,18 +322,13 @@ export default function RescuersTab({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => showToast("Clearing current telemetry filter... (Mock)")}
+                onClick={() => {
+                  setRescuerSearch("");
+                  setRescuerFilter("all");
+                }}
                 className="px-2.5 py-1.5 bg-white border border-slate-205 hover:border-slate-300 text-slate-650 text-[10px] font-bold uppercase rounded transition-colors shadow-xs cursor-pointer font-mono"
               >
                 Clear Filters
-              </button>
-              <button
-                type="button"
-                onClick={() => showToast("Broadcasting diagnostic signal... (Mock)")}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold tracking-wider uppercase rounded transition-colors shadow-xs cursor-pointer font-mono"
-              >
-                <Wifi size={10} />
-                Ping Mesh
               </button>
             </div>
           </div>
@@ -434,9 +428,8 @@ export default function RescuersTab({
             </div>
           </div>
 
-          <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono px-1">
-            <span>Active Rescuer Mesh Devices: 3 Units connected</span>
-            <span>Last diagnostic scan: Just now</span>
+          <div className="text-[9px] text-slate-400 font-mono px-1">
+            Live rescuer telemetry will appear here when connected.
           </div>
         </div>
       )}

@@ -87,28 +87,7 @@ function createTables() {
         status TEXT DEFAULT 'available', -- 'available' | 'en-route' | 'offline'
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      // Seed data if empty
-      db.get("SELECT COUNT(*) as count FROM rescuers", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedRescuers = [
-            ["rescuer1@zamboalert.gov", "Rescue Team", "Alpha", "+639987654321", "Barangay ID", "BRGY-R01", 1, "en-route"],
-            ["medic1@zamboalert.gov", "Medic", "Unit 1", "+639123456789", "Government ID", "GOV-R02", 1, "available"],
-            ["rescuer2@zamboalert.gov", "Rescue Team", "Beta", "+639876543210", "Barangay ID", "BRGY-R03", 1, "available"],
-            ["pending_rescuer@test.com", "Mark", "Rescuer", "+639012345678", "Barangay ID", "BRGY-PENDING", 0, "offline"]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO rescuers (email, first_name, last_name, phone_number, id_type, id_number, is_verified, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedRescuers.forEach((rescuer) => {
-            stmt.run(rescuer);
-          });
-          stmt.finalize();
-          console.log("Seeded rescuers table.");
-        }
-      });
-    });
+    `);
 
     // Casualty/Victim logs table
     db.run(`
@@ -133,30 +112,8 @@ function createTables() {
         // Now that the column is guaranteed to exist (either created just now or already present):
         
         // Update existing records with default disaster types if they are null
-        db.run("UPDATE casualty_logs SET disaster_type = 'Flood' WHERE disaster_type IS NULL AND (victim_name = 'Maria Santos' OR victim_name = 'Juanito Cruz')");
-        db.run("UPDATE casualty_logs SET disaster_type = 'Landslide' WHERE disaster_type IS NULL AND (victim_name = 'Unknown Male' OR victim_name = 'Amara Climaco')");
         db.run("UPDATE casualty_logs SET disaster_type = 'Unknown' WHERE disaster_type IS NULL");
 
-        // Seed data if empty
-        db.get("SELECT COUNT(*) as count FROM casualty_logs", (err, row) => {
-          if (!err && row && row.count === 0) {
-            const seedLogs = [
-              ["R-01", "Rescue Team Alpha", "Maria Santos", 34, "Female", "Injured", "Fractured left arm, stable", "Zone 1 - Riverbank", 6.9234, 122.0765, "Flood"],
-              ["R-02", "Medic Unit 1", "Unknown Male", 50, "Male", "Deceased", "Drowning victim, recovered near bridge", "Zone 3 - Lowland", 6.9205, 122.0812, "Landslide"],
-              ["R-01", "Rescue Team Alpha", "Juanito Cruz", 8, "Male", "Rescued", "Mild hypothermia, reunited with mother", "Zone 4 - Chapel Area", 6.9250, 122.0795, "Flood"],
-              ["R-03", "Rescue Team Beta", "Amara Climaco", 72, "Female", "Missing", "Swept away by current, search ongoing", "Zone 1 - Riverbank", 6.9240, 122.0770, "Landslide"]
-            ];
-            const stmt = db.prepare(`
-              INSERT INTO casualty_logs (rescuer_id, rescuer_name, victim_name, age, gender, status, injury_details, location, latitude, longitude, disaster_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            seedLogs.forEach((log) => {
-              stmt.run(log);
-            });
-            stmt.finalize();
-            console.log("Seeded casualty logs table.");
-          }
-        });
       });
     });
 
@@ -186,24 +143,6 @@ function createTables() {
     db.run("ALTER TABLE rescuers ADD COLUMN longitude REAL", () => {});
     db.run("ALTER TABLE rescuers ADD COLUMN response_status TEXT DEFAULT 'available'", () => {});
 
-    // Seed default Tanods if missing
-    db.get("SELECT COUNT(*) as count FROM rescuers WHERE role = 'Tanod'", (err, row) => {
-      if (!err && row && row.count === 0) {
-        const seedTanods = [
-          ["tanod.perez@zamboalert.gov", "Juan", "Perez", "+639171234567", "Barangay Tanod ID", "BRGY-T01", 1, "available", "Tanod", "Zone 1 - Riverbank", 6.9225, 122.0770],
-          ["tanod.climaco@zamboalert.gov", "Rodrigo", "Climaco", "+639287654321", "Barangay Tanod ID", "BRGY-T02", 1, "available", "Tanod", "Zone 3 - Lowland", 6.9200, 122.0810],
-          ["tanod.santos@zamboalert.gov", "Maria", "Santos", "+639391112233", "Barangay Tanod ID", "BRGY-T03", 1, "available", "Tanod", "Zone 4 - Chapel Area", 6.9245, 122.0792]
-        ];
-        const stmt = db.prepare(`
-          INSERT INTO rescuers (email, first_name, last_name, phone_number, id_type, id_number, is_verified, status, role, assigned_zone, latitude, longitude)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        seedTanods.forEach((t) => stmt.run(t));
-        stmt.finalize();
-        console.log("Seeded Barangay Tanods.");
-      }
-    });
-
     // Households / Resident Registry table
     db.run(`
       CREATE TABLE IF NOT EXISTS households (
@@ -219,26 +158,7 @@ function createTables() {
         longitude REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM households", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedHouseholds = [
-            ["Elena Ramos", "Roberto Ramos", "+639171112233", "Zone 1 - Riverbank", 5, 2, "Active", 6.9231, 122.0760],
-            ["Eduardo Climaco", "Eduardo Climaco", "+639282223344", "Zone 2 - Commercial", 4, 1, "Active", 6.9210, 122.0752],
-            ["Teresita Alvarez", "Teresita Alvarez", "+639393334455", "Zone 3 - Lowland", 6, 3, "Evacuated", 6.9195, 122.0805],
-            ["Ramon Valderrosa", "Ramon Valderrosa", "+639984445566", "Zone 4 - Chapel Area", 3, 0, "Active", 6.9248, 122.0790],
-            ["Maria Clara Santos", "Gabriel Santos", "+639175556677", "Zone 1 - Riverbank", 4, 1, "Active", 6.9228, 122.0768]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO households (resident_name, household_head, phone_number, purok_zone, occupants_count, vulnerable_count, status, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedHouseholds.forEach((hh) => stmt.run(hh));
-          stmt.finalize();
-          console.log("Seeded households table.");
-        }
-      });
-    });
+    `);
 
     // Incidents & Analytics table
     db.run(`
@@ -260,24 +180,7 @@ function createTables() {
         summary_notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM incidents", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedIncidents = [
-            ["Flash Flood Event - Tumaga River Spill", "Flood", "2026-08-14", 2.85, 142, 86, 1, 12, 3.2, 8.8, "Zone 1 - Riverbank", 1250000.00, "Closed", "Torrential rainfall caused Tumaga River overflow. Rapid deployment of Tanods & Rescue Team Alpha."],
-            ["Monsoon Inundation & Lowland Surge", "Flood", "2025-10-22", 1.90, 98, 45, 0, 15, 4.1, 10.9, "Zone 3 - Lowland", 480000.00, "Closed", "Sustained monsoon rain inundating low-lying residential clusters in Zone 3."],
-            ["Typhoon Kristine Flood Emergency", "Flood", "2024-11-05", 3.40, 310, 215, 2, 18, 5.5, 12.5, "Barangay Wide", 4500000.00, "Closed", "Category 3 Typhoon event. Major evacuation initiated across all 4 Purok zones."]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO incidents (title, disaster_type, date_occurred, water_level_m, affected_households, total_rescued, casualties_count, avg_response_time_mins, dispatch_time_mins, on_scene_time_mins, purok_zone, damage_estimate_php, status, summary_notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedIncidents.forEach((inc) => stmt.run(inc));
-          stmt.finalize();
-          console.log("Seeded incidents table.");
-        }
-      });
-    });
+    `);
 
     // ── Barangay Manpower & Worst-Case Disaster Resource Tables ──
     db.run(`
@@ -301,41 +204,7 @@ function createTables() {
         longitude REAL NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM barangays", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedBarangays = [
-            ["Tumaga", "Central Urban", 32500, 6500, "Extreme", 14, 28, 8, 12, 6, 3, 2, "Capt. Roberto Alvarez", "+639171239901", 6.9235, 122.0780],
-            ["Tetuan", "Central Urban", 29800, 5960, "High", 12, 24, 6, 10, 4, 2, 1, "Capt. Arnold Climaco", "+639171239902", 6.9180, 122.0880],
-            ["Sta. Maria", "Central Urban", 24500, 4900, "Moderate", 10, 20, 6, 8, 2, 1, 1, "Capt. Maria Santos", "+639171239903", 6.9280, 122.0720],
-            ["San Roque", "District 1 - West", 27300, 5460, "Extreme", 10, 22, 5, 8, 4, 2, 1, "Capt. Eduardo Perez", "+639171239904", 6.9400, 122.0650],
-            ["Calarian", "District 1 - West", 28400, 5680, "High", 12, 26, 7, 10, 6, 3, 2, "Capt. Danilo Lim", "+639171239905", 6.9250, 122.0350],
-            ["Pasonanca", "District 1 - West", 26100, 5220, "Extreme", 15, 25, 8, 10, 2, 1, 1, "Capt. Felipe Morales", "+639171239906", 6.9550, 122.0750],
-            ["Baliwasan", "District 1 - West", 31200, 6240, "Extreme", 12, 26, 7, 12, 8, 4, 2, "Capt. Fatima Hassan", "+639171239907", 6.9120, 122.0580],
-            ["Guiwan", "Central Urban", 16400, 3280, "High", 8, 18, 4, 6, 2, 1, 1, "Capt. Carlos Tan", "+639171239908", 6.9260, 122.0950],
-            ["Ayala", "District 1 - West", 22900, 4580, "High", 10, 20, 5, 8, 5, 3, 1, "Capt. Ricardo Gomez", "+639171239909", 6.9600, 121.9600],
-            ["Putik", "District 2 - East", 20500, 4100, "High", 9, 18, 5, 7, 3, 2, 1, "Capt. Teresa Ramos", "+639171239910", 6.9380, 122.1150],
-            ["Talon-Talon", "District 2 - East", 35600, 7120, "Extreme", 14, 30, 8, 14, 10, 5, 2, "Capt. Jamil Sahid", "+639171239911", 6.8950, 122.1050],
-            ["Labuan", "District 1 - West", 14200, 2840, "Extreme", 6, 14, 3, 5, 4, 2, 1, "Capt. Nelson Diaz", "+639171239912", 7.0800, 121.9050],
-            ["Vitali", "District 2 - East", 12800, 2560, "High", 6, 12, 3, 5, 3, 2, 0, "Capt. Ernesto Cruz", "+639171239913", 7.3400, 122.2850],
-            ["Curuan", "District 2 - East", 11500, 2300, "High", 5, 12, 3, 4, 3, 1, 0, "Capt. Josefa Reyes", "+639171239914", 7.2200, 122.2200],
-            ["Campo Islam", "District 1 - West", 18900, 3780, "Extreme", 8, 18, 4, 8, 8, 4, 1, "Capt. Ibrahim Malik", "+639171239915", 6.9080, 122.0450],
-            ["Sinunuc", "District 1 - West", 17600, 3520, "High", 7, 16, 4, 6, 4, 2, 1, "Capt. Rodrigo Yap", "+639171239916", 6.9400, 122.0100],
-            ["Tugbungan", "District 2 - East", 23400, 4680, "High", 10, 22, 6, 8, 4, 2, 1, "Capt. Gloria Fernandez", "+639171239917", 6.9150, 122.0980],
-            ["Santa Barbara", "Central Urban", 15200, 3040, "Moderate", 8, 16, 4, 6, 2, 1, 1, "Capt. Ramon Valderrosa", "+639171239918", 6.9130, 122.0800],
-            ["Divisoria", "District 2 - East", 13600, 2720, "High", 6, 14, 3, 5, 2, 1, 1, "Capt. Beatriz Luna", "+639171239919", 6.9550, 122.1350],
-            ["Manicahan", "District 2 - East", 10900, 2180, "High", 5, 12, 3, 4, 4, 2, 0, "Capt. Simeon Castro", "+639171239920", 7.0200, 122.1850]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO barangays (name, district, population, households, risk_level, active_sar, active_tanods, active_medics, active_logistics, active_boat_crews, rescue_boats, ambulances, contact_person, contact_number, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedBarangays.forEach((b) => stmt.run(b));
-          stmt.finalize();
-          console.log("Seeded 20 Zamboanga City Barangays.");
-        }
-      });
-    });
+    `);
 
     // Manpower Alerts table for Worst-Case Disaster Scenarios
     db.run(`
@@ -360,31 +229,7 @@ function createTables() {
         triggered_by TEXT DEFAULT 'ZCDRRMO AI System',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM manpower_alerts", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedAlerts = [
-            [1, "Tumaga", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 11200, 48, 65, 24, 30, 167, 60, 107, 64.1, "CRITICAL RED", "Active", "Emergency Callout Initiated", "Admin Command"],
-            [11, "Talon-Talon", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 14500, 56, 75, 28, 35, 194, 66, 128, 66.0, "CRITICAL RED", "Active", "Mutual Aid Requested", "Admin Command"],
-            [7, "Baliwasan", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 12800, 50, 68, 25, 32, 175, 57, 118, 67.4, "CRITICAL RED", "Active", "ZCDRRMO Reinforcement Escalated", "Admin Command"],
-            [4, "San Roque", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 9800, 38, 52, 18, 24, 132, 45, 87, 65.9, "CRITICAL RED", "Active", "Tanod Surge Alert Sent", "Admin Command"],
-            [2, "Tetuan", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 8900, 34, 48, 16, 22, 120, 52, 68, 56.7, "CRITICAL RED", "Active", "Pending Mobilization", "Admin Command"],
-            [6, "Pasonanca", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 7600, 30, 42, 14, 18, 104, 58, 46, 44.2, "SEVERE ORANGE", "Active", "Mutual Aid Standby", "Admin Command"],
-            [5, "Calarian", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 6500, 26, 38, 12, 16, 92, 55, 37, 40.2, "SEVERE ORANGE", "Active", "Pending Mobilization", "Admin Command"],
-            [17, "Tugbungan", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 5900, 24, 34, 12, 15, 85, 46, 39, 45.9, "SEVERE ORANGE", "Active", "Pending Mobilization", "Admin Command"],
-            [3, "Sta. Maria", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 4200, 18, 28, 8, 12, 66, 44, 22, 33.3, "SEVERE ORANGE", "Active", "Surplus Standby Ready", "Admin Command"],
-            [18, "Santa Barbara", "Flash Flood", "Level 4 - Worst-Case Catastrophe", 2800, 12, 20, 6, 8, 46, 34, 12, 26.1, "MODERATE YELLOW", "Active", "Surplus Resource Available", "Admin Command"]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO manpower_alerts (barangay_id, barangay_name, disaster_type, scenario_level, projected_affected_pop, required_sar, required_tanods, required_medics, required_logistics, required_total, available_total, deficit_count, deficit_percentage, alert_level, status, mobilization_status, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedAlerts.forEach((a) => stmt.run(a));
-          stmt.finalize();
-          console.log("Seeded Worst-Case Manpower Alerts.");
-        }
-      });
-    });
+    `);
 
     // Manpower Mutual Aid Transfers table
     db.run(`
@@ -402,23 +247,7 @@ function createTables() {
         notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM manpower_transfers", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedTransfers = [
-            ["Sta. Maria", "Tumaga", "Flash Flood", 4, 8, 2, 2, 16, "En-Route", "Mutual aid deployment for Tumaga River spill emergency"],
-            ["Santa Barbara", "Tetuan", "Flash Flood", 2, 6, 2, 0, 10, "On-Scene", "Crowd & Evacuation perimeter assistance at Tetuan Central School"]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO manpower_transfers (from_barangay, to_barangay, disaster_type, sar_count, tanod_count, medic_count, logistics_count, total_personnel, status, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedTransfers.forEach((t) => stmt.run(t));
-          stmt.finalize();
-          console.log("Seeded Manpower Transfers.");
-        }
-      });
-    });
+    `);
 
     // Manpower External Agency Escalations table
     db.run(`
@@ -436,23 +265,7 @@ function createTables() {
         status TEXT DEFAULT 'Acknowledged & Dispatched',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      db.get("SELECT COUNT(*) as count FROM manpower_escalations", (err, row) => {
-        if (!err && row && row.count === 0) {
-          const seedEscalations = [
-            ["ESC-ZCD-9901", "Tumaga, Talon-Talon, Baliwasan", "Flash Flood", "Level 4 - Worst-Case Catastrophe", "Philippine Coast Guard (PCG)", "4 Rubber Boats + 16 Water SAR Operatives", 16, "High Priority", "Urgent waterborne rescue required for stranded families on rooftops along riverbank."],
-            ["ESC-ZCD-9902", "Tumaga, San Roque", "Flash Flood", "Level 4 - Worst-Case Catastrophe", "AFP Joint Task Force Zamboanga", "3 M35 6x6 Military Rescue Trucks + 24 Personnel", 24, "Critical Priority", "Heavy vehicle evacuation across 4-foot deep flooded access corridors."]
-          ];
-          const stmt = db.prepare(`
-            INSERT INTO manpower_escalations (reference_no, target_barangays, disaster_type, scenario_level, requested_agency, requested_units, total_reinforcements, priority, notes, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-          seedEscalations.forEach((e) => stmt.run(e));
-          stmt.finalize();
-          console.log("Seeded Agency Escalations.");
-        }
-      });
-    });
+    `);
   });
 }
 
@@ -1644,6 +1457,3 @@ function startServer(portIndex = 0) {
 }
 
 startServer();
-
-
-

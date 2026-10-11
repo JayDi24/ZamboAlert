@@ -10,13 +10,13 @@ import StatusDot from '../../components/StatusDot';
 import { useAppState } from '../../context/AppStateContext';
 
 export default function StatusScreen({ navigation }: any) {
-  const { sosActive, nearbyPods, coords, gpsLocked } = useAppState();
+  const { sosActive, coords, gpsLocked } = useAppState();
 
   return (
     <View style={styles.screen}>
       <Header
-        statusLine={`${nearbyPods.length} pod${nearbyPods.length === 1 ? '' : 's'} detected`}
-        statusDotColor={nearbyPods.length > 0 ? colors.success : colors.statusUnknown}
+        statusLine={sosActive ? 'SOS beacon active' : 'No active SOS beacon'}
+        statusDotColor={sosActive ? colors.primary : colors.statusUnknown}
       />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -44,31 +44,13 @@ export default function StatusScreen({ navigation }: any) {
         </Card>
 
         <Card>
-          <Text style={[typography.eyebrow, styles.cardLabel]}>Rescuer pods nearby</Text>
-
-          {nearbyPods.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="radio-outline" size={22} color={colors.textMuted} />
-              <Text style={[typography.meta, styles.emptyText]}>
-                {sosActive
-                  ? 'No pods in range yet — keep your beacon on.'
-                  : 'Send your SOS from the home tab to start scanning for nearby pods.'}
-              </Text>
-            </View>
-          ) : (
-            nearbyPods.map((pod, i) => (
-              <View
-                key={pod.id}
-                style={[styles.podRow, i !== nearbyPods.length - 1 && styles.podRowBorder]}
-              >
-                <View style={styles.podLeft}>
-                  <View style={styles.podDot} />
-                  <Text style={typography.entryTitle}>{pod.label}</Text>
-                </View>
-                <Text style={typography.meta}>{pod.rssi} dBm</Text>
-              </View>
-            ))
-          )}
+          <Text style={[typography.eyebrow, styles.cardLabel]}>Rescuer pod network</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="radio-outline" size={22} color={colors.textMuted} />
+            <Text style={[typography.meta, styles.emptyText]}>
+              Pod locations and SOS detections are available on the operations dashboard after the gateway receives LoRa telemetry.
+            </Text>
+          </View>
         </Card>
       </ScrollView>
     </View>
@@ -95,13 +77,4 @@ const styles = StyleSheet.create({
   cardLabel: { marginBottom: 10 },
   emptyState: { alignItems: 'center', gap: 8, paddingVertical: 18 },
   emptyText: { textAlign: 'center', maxWidth: 240 },
-  podRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  podRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  podLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  podDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
 });

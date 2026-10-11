@@ -27,3 +27,35 @@ Hardware: ESP32, LoRa SX1278 (433MHz), NEO-6M GPS Module
 
 
 Capstone Project, College of Computing Studies, Western Mindanao State University
+
+
+## LoRa gateway and pod integration
+
+The ESP32 firmware for the gateway and rescuer pod is in [`firmware/`](./firmware).
+The merged backend stores authenticated gateway reports in its JSON database at
+`POST /api/telemetry`
+and returns reports received in the last 90 seconds from `GET /api/telemetry`.
+The web dashboard polls that endpoint every three seconds and shows GPS-fixed
+pods on the Tactical Map; a pod is shown as SOS when an SOS packet or a nearby
+BLE victim is reported.
+
+For a local hardware test:
+
+1. From `backend/`, create a private `.env` based on
+   [`backend/.env.example`](./backend/.env.example), set a long random
+   `GATEWAY_API_KEY`, then run `npm install` and `npm start`. The server listens
+   on port 3000 and binds to the LAN, so allow inbound TCP 3000 on the backend
+   computer's private-network firewall.
+2. Set the same API key and your backend computer's LAN IP in
+   [`firmware/zamboalert-gateway/include/config.h`](./firmware/zamboalert-gateway/include/config.h),
+   along with the gateway Wi-Fi credentials and surveyed gateway coordinates.
+   Rebuild and flash the gateway. Never set its URL to `localhost`.
+3. Configure and flash the pod. Install the Citizen app dependencies with
+   `npm --prefix zamboalert-app install`, then build/install its native Android
+   app with `npm --prefix zamboalert-app run android` on a machine with Android
+   SDK tools and a connected device. Expo Go cannot advertise BLE.
+4. Open the web dashboard and verify the pod appears after it sends a GPS-fixed
+   LoRa packet. The marker uses the pod's GPS fix, not the citizen phone's GPS.
+
+The backend can run locally; public deployment is not required for this LAN
+test. Avoid exposing the HTTP endpoint or shared key to the public Internet.
