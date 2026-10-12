@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "com.zamboalert.citizen",
+      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -28,7 +29,14 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "blockedPermissions": ["android.permission.BLUETOOTH_SCAN"]
+      "blockedPermissions": [
+        "android.permission.BLUETOOTH_SCAN"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0f93e993-8df6-4415-8075-0bfb06addb8e"
+      }
     }
   }
 }

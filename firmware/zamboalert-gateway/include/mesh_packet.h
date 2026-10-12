@@ -9,7 +9,7 @@
 // payloads. Implementing real protobuf on an ESP32 means adding the
 // nanopb library and a .proto schema compiled to C, which is a project
 // task in its own right. This header is a pragmatic stand-in: a packed
-// C struct that is compact (27 bytes, same ballpark as the spec's
+// C struct that is compact (36 bytes, same ballpark as the spec's
 // target), deterministic, and easy to decode on the gateway/server
 // side. Swapping it for real protobuf later only touches encodePacket()
 // / decodePacket() below - nothing else in pod.cpp or gateway.cpp needs

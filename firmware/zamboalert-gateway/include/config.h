@@ -36,7 +36,7 @@
 #define WIFI_PASSWORD "NoInternet.2024"
 
 // ---------- HTTP target (only used if FORWARD_VIA_HTTP is 1) ----------
-#define SERVER_URL "http://192.168.254.111/api/telemetry"
+#define SERVER_URL "http://192.168.254.111:3000/api/telemetry"
 #define GATEWAY_API_KEY "c44cd9714f6d56f4f1d31e86c6e6876f5c5055f7635bd9e7bcb2087392016e04"
 
 // ---------- MQTT target (only used if FORWARD_VIA_MQTT is 1) ----------

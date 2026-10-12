@@ -103,6 +103,7 @@ uint32_t txSeq = 0;
 unsigned long lastGpsReport = 0;
 unsigned long lastTelemetryTx = 0;
 unsigned long lastBleScan = 0;
+unsigned long telemetryInterval = TELEMETRY_INTERVAL_MS;
 
 // Latest BLE victim-scan summary, read by the telemetry packet builder.
 int victimCount = 0;
@@ -219,7 +220,7 @@ void scanForVictims() {
     digitalWrite(LED_PIN, proximityActive ? HIGH : LOW);
     if (BUZZER_PIN >= 0) digitalWrite(BUZZER_PIN, proximityActive ? HIGH : LOW);
 
-    if (victimCount > 0 && !wasActive) {
+    if (proximityActive && !wasActive) {
         // Send an out-of-cycle SOS packet immediately, don't wait for the
         // next routine telemetry interval.
         extern void sendPacket(uint8_t msgType);
@@ -288,7 +289,7 @@ void sendPacket(uint8_t msgType) {
     pkt.nodeId = nodeId;
     pkt.seq = txSeq++;
 
-    bool fix = gps.location.isValid();
+    bool fix = gps.location.isValid() && gps.location.age() <= 10000UL;
     pkt.gpsFix = fix ? 1 : 0;
     pkt.lat_e6 = fix ? (int32_t)(gps.location.lat() * 1e6) : 0;
     pkt.lng_e6 = fix ? (int32_t)(gps.location.lng() * 1e6) : 0;
@@ -428,8 +429,9 @@ void loop() {
 
     handleLoraRx();
 
-    if (now - lastTelemetryTx >= TELEMETRY_INTERVAL_MS) {
-        lastTelemetryTx = now + random(0, 1500); // jitter to avoid sync collisions
+    if ((uint32_t)(now - lastTelemetryTx) >= telemetryInterval) {
+        lastTelemetryTx = now;
+        telemetryInterval = TELEMETRY_INTERVAL_MS + random(0, 1500); // jitter to avoid synchronized transmissions
         sendPacket(ZA_MSG_TELEMETRY);
     }
 

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import * as Location from 'expo-location';
-import * as BLEAdvertiser from 'react-native-ble-advertiser';
+const BLEAdvertiser = require('react-native-ble-advertiser') as typeof import('react-native-ble-advertiser');
 
 const SOS_SERVICE_UUID = 'fef10001-7b82-4b93-b2c2-0f81ea3300a1';
 
@@ -64,6 +64,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   async function startBeacon(type: string) {
     try {
+      if (
+        !BLEAdvertiser ||
+        typeof BLEAdvertiser.isActive !== 'function' ||
+        typeof BLEAdvertiser.setCompanyId !== 'function' ||
+        typeof BLEAdvertiser.broadcast !== 'function'
+      ) {
+        throw new Error('The BLE advertiser is missing from this app build. Rebuild and reinstall the native app.');
+      }
+
       if (Platform.OS === 'android' && Number(Platform.Version) >= 31) {
         const permissions = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
