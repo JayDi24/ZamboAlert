@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { Mono } from '../components/SharedUI';
 import { styles } from '../theme/styles';
-import { situationColors, logTypeColors } from '../assets/mockData';
+import { situationColors, logTypeColors } from '../assets/displayConfig';
 
 export interface VictimItem {
   id: string;
@@ -108,7 +108,7 @@ export function LogView({
       msg,
       true,
       isNew ? 'Victim Registered' : 'Victim Updated',
-      isNew ? `Successfully registered and placed ${label} on radar.` : `Successfully updated details for ${label}.`
+      isNew ? `Successfully recorded ${label}. Location is not available until a live GPS report is received.` : `Successfully updated details for ${label}.`
     );
 
     setVictimLabel('');
@@ -263,7 +263,7 @@ export function LogView({
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. VICTIM-05 or John Doe"
+              placeholder="Victim name or incident reference"
               placeholderTextColor="#666"
               value={victimLabel}
               onChangeText={(text) => {
@@ -371,7 +371,11 @@ export function LogView({
       </View>
 
       <View style={styles.listContainer}>
-        {log.map((entry) => {
+        {log.length === 0 ? (
+          <Text style={{ padding: 16, color: '#6b7280', textAlign: 'center' }}>
+            No logs recorded yet.
+          </Text>
+        ) : log.map((entry) => {
           const t = logTypeColors[entry.type as keyof typeof logTypeColors] || { label: 'LOG', color: '#6b7280' };
           return (
             <View key={entry.id} style={styles.logCard}>

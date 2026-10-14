@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, Animated } from 'react-native';
 import { WebView } from 'react-native-webview';
-import Svg, { Circle, Line, Rect, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Line, Rect, G } from 'react-native-svg';
 import { Navigation, ShieldAlert, ChevronRight, MapPin, X, Layers, LifeBuoy, AlertTriangle } from 'lucide-react-native';
 import { Mono, PulsingDot } from './SharedUI';
-import { VICTIM_COORDS, situationColors } from '../assets/mockData';
+import { situationColors } from '../assets/displayConfig';
 import { styles } from '../theme/styles';
 
 const LEAFLET_HTML = `
@@ -109,56 +109,11 @@ const LEAFLET_HTML = `
       position: 'bottomright'
     }).addTo(map);
 
-    var rescuerIcon = L.divIcon({
-      className: 'rescuer-pulsing-container',
-      html: '<div class="rescuer-pin rescuer-pulsing"></div>',
-      iconSize: [18, 18],
-      iconAnchor: [9, 9]
-    });
-
-    var rescuerMarker = L.marker([6.9394, 122.0796], { icon: rescuerIcon }).addTo(map);
-    rescuerMarker.bindPopup("<b>You (Rescuer Pod)</b><br>Barangay Tumaga, Zamboanga City");
-
-    var rangeCircle = L.circle([6.9394, 122.0796], {
-      radius: 1000,
-      color: '#2563eb',
-      fillColor: '#2563eb',
-      fillOpacity: 0.05,
-      weight: 1.5,
-      dashArray: '5, 5',
-      className: 'glowing-web'
-    }).addTo(map);
-
-    function convertToGps(x, y) {
-      return [
-        6.9394 - (y - 50) * 0.00015,
-        122.0796 + (x - 50) * 0.00015
-      ];
-    }
-
-    var zones = [
-      { name: "🌊 Flood Zone", coords: convertToGps(30, 25), radius: 120, color: "#2563eb", fillOpacity: 0.12 },
-      { name: "🪨 Landslide Zone", coords: convertToGps(68, 20), radius: 100, color: "#d97706", fillOpacity: 0.12 },
-      { name: "🏢 Earthquake Area", coords: convertToGps(60, 72), radius: 130, color: "#4b5563", fillOpacity: 0.12 },
-      { name: "🔥 Active Fire Area", coords: convertToGps(45, 40), radius: 90, color: "#ef4444", fillOpacity: 0.12 }
-    ];
-
-    zones.forEach(function(zone) {
-      L.circle(zone.coords, {
-        radius: zone.radius,
-        color: zone.color,
-        fillColor: zone.color,
-        fillOpacity: zone.fillOpacity,
-        weight: 1.5,
-        dashArray: '4, 4'
-      }).bindTooltip(zone.name, { permanent: true, direction: 'top', className: 'disaster-zone-tooltip', opacity: 0.8 }).addTo(map);
-    });
-
     var victimMarkers = {};
-    var currentVictims = [];
-    var pathLine = null;
+    var centeredLiveVictims = {};
 
     function getSituationColor(situation) {
+      if (situation === 'SOS') return '#dc2626';
       if (situation === 'trapped') return '#dc2626';
       if (situation === 'injured') return '#d97706';
       if (situation === 'safe') return '#15803d';
@@ -188,23 +143,14 @@ const LEAFLET_HTML = `
       sendReadyMessage();
     });
 
-    var hasCentered = false;
-
     function updateMap(data) {
-      if (data.userLat && data.userLng) {
-        var userLatLng = [data.userLat, data.userLng];
-        rescuerMarker.setLatLng(userLatLng);
-        if (typeof rangeCircle !== 'undefined' && rangeCircle) {
-          rangeCircle.setLatLng(userLatLng);
-        }
-        if (data.isNavigating || !hasCentered) {
-          map.setView(userLatLng, map.getZoom());
-          hasCentered = true;
-        }
-      }
-
       if (data.victims) {
-        currentVictims = data.victims;
+        data.victims.forEach(function(v) {
+          if (v.isLive && !centeredLiveVictims[v.id]) {
+            map.setView([v.lat, v.lng], 17);
+            centeredLiveVictims[v.id] = true;
+          }
+        });
         var newIds = data.victims.map(function(v) { return v.id; });
         for (var id in victimMarkers) {
           if (newIds.indexOf(id) === -1) {
@@ -216,6 +162,9 @@ const LEAFLET_HTML = `
         data.victims.forEach(function(v) {
           var color = getSituationColor(v.situation);
           var borderStyle = v.isSelected ? 'border: 3.5px solid #000000; scale: 1.25;' : 'border: 2px solid #ffffff;';
+          var locationNote = v.isLive
+            ? (v.hasGpsFix ? '<br>Location: GPS fix' : '<br>Location: approximate — pod has no GPS fix')
+            : '';
           
           var disasterEmoji = getDisasterEmoji(v.disasterType);
           var badgeHtml = disasterEmoji ? '<span style="position: absolute; top: -10px; right: -10px; background: white; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 1000;">' + disasterEmoji + '</span>' : '';
@@ -230,10 +179,10 @@ const LEAFLET_HTML = `
           if (victimMarkers[v.id]) {
             victimMarkers[v.id].setLatLng([v.lat, v.lng]);
             victimMarkers[v.id].setIcon(victimIcon);
-            victimMarkers[v.id].setPopupContent("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+            victimMarkers[v.id].setPopupContent("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor) + locationNote);
           } else {
             var marker = L.marker([v.lat, v.lng], { icon: victimIcon }).addTo(map);
-            marker.bindPopup("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor));
+            marker.bindPopup("<b>" + v.label + "</b><br>Status: " + v.situation.toUpperCase() + "<br>Disaster: " + (v.disasterType ? v.disasterType.toUpperCase() : 'N/A') + "<br>Floor: " + (v.floor === 0 ? 'G' : v.floor) + locationNote);
             
             marker.on('click', function() {
               var msg = JSON.stringify({ type: 'selectVictim', id: v.id });
@@ -251,24 +200,6 @@ const LEAFLET_HTML = `
             victimMarkers[v.id].openPopup();
           }
         });
-      }
-
-      if (pathLine) {
-        map.removeLayer(pathLine);
-        pathLine = null;
-      }
-
-      var activeVictim = currentVictims.find(function(v) { return v.isSelected; });
-      if (activeVictim && data.userLat && data.userLng) {
-        pathLine = L.polyline([
-          [data.userLat, data.userLng],
-          [activeVictim.lat, activeVictim.lng]
-        ], {
-          color: '#dc2626',
-          weight: 3.5,
-          dashArray: '6, 8',
-          opacity: 0.85
-        }).addTo(map);
       }
     }
 
@@ -362,41 +293,33 @@ export function MapView({
   const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const TUMAGA_LAT = 6.9394;
-  const TUMAGA_LNG = 122.0796;
+  const hasLiveAlert = victims.some((victim) => victim.isLive);
 
-  const convertToGps = (x: number, y: number) => {
-    // Barangay Tumaga is centered around (x=50, y=50)
-    // 1% roughly maps to 0.00015 degrees latitude/longitude (approx 16 meters)
-    const lng = TUMAGA_LNG + (x - 50) * 0.00015;
-    const lat = TUMAGA_LAT - (y - 50) * 0.00015;
-    return { lat, lng };
-  };
+  useEffect(() => {
+    if (hasLiveAlert) setMapType('leaflet');
+  }, [hasLiveAlert]);
 
-  const userGps = convertToGps(userPos.x, userPos.y);
-
-  const victimGpsList = victims.map((v, idx) => {
-    const coords = VICTIM_COORDS[v.id] || { x: 50, y: 50 };
-    const gps = convertToGps(coords.x, coords.y);
-    return {
-      id: v.id,
-      label: v.label,
-      idx: idx + 1,
-      lat: gps.lat,
-      lng: gps.lng,
-      situation: v.situation,
-      floor: v.floor,
-      isSelected: selectedVictim === v.id,
-      disasterType: v.disasterType,
-    };
-  });
+  const victimGpsList = victims
+    .filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lng))
+    .map((v, idx) => {
+      return {
+        id: v.id,
+        label: v.label,
+        idx: idx + 1,
+        lat: v.lat,
+        lng: v.lng,
+        situation: v.situation,
+        floor: v.floor,
+        isSelected: selectedVictim === v.id,
+        disasterType: v.disasterType,
+        isLive: Boolean(v.isLive),
+        hasGpsFix: Boolean(v.hasGpsFix),
+      };
+    });
 
   const sendMapUpdate = () => {
     const data = {
       type: 'update',
-      userLat: userGps.lat,
-      userLng: userGps.lng,
-      isNavigating: isNavigating,
       victims: victimGpsList,
     };
 
@@ -418,7 +341,7 @@ export function MapView({
     if (mapReady) {
       sendMapUpdate();
     }
-  }, [mapReady, userPos.x, userPos.y, isNavigating, victims, selectedVictim]);
+  }, [mapReady, victims, selectedVictim]);
 
   // Reset ready state when mapType changes to force a fresh hand-shake
   useEffect(() => {
@@ -475,9 +398,9 @@ export function MapView({
     }
   };
 
-  const selectedV = victims.find((v) => v.id === selectedVictim);
-  const targetCoords = selectedV ? VICTIM_COORDS[selectedV.id] : null;
-
+  const selectedV = victims.find(
+    (v) => !v.isLive && v.id === selectedVictim && Number.isFinite(v.lat) && Number.isFinite(v.lng),
+  );
   const [dashOffset, setDashOffset] = useState(0);
   useEffect(() => {
     if (!isNavigating) {
@@ -506,24 +429,6 @@ export function MapView({
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             {/* Toggle Switch */}
-            <View style={localStyles.toggleContainer}>
-              <TouchableOpacity
-                onPress={() => setMapType('leaflet')}
-                style={[localStyles.toggleButton, mapType === 'leaflet' && localStyles.toggleButtonActive]}
-              >
-                <Text style={[localStyles.toggleText, mapType === 'leaflet' && localStyles.toggleTextActive]}>
-                  GPS
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setMapType('indoor')}
-                style={[localStyles.toggleButton, mapType === 'indoor' && localStyles.toggleButtonActive]}
-              >
-                <Text style={[localStyles.toggleText, mapType === 'indoor' && localStyles.toggleTextActive]}>
-                  Indoor
-                </Text>
-              </TouchableOpacity>
-            </View>
             <View style={styles.row}>
               <View style={[styles.mapDotIndicator, { backgroundColor: mapType === 'leaflet' ? '#22c55e' : '#f59e0b' }]} />
               <Mono style={styles.mapHeaderStatusText}>
@@ -570,31 +475,6 @@ export function MapView({
                 <Line x1="47%" y1="10%" x2="47%" y2="90%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
                 <Line x1="12%" y1="48%" x2="88%" y2="48%" stroke="rgba(0,0,0,0.06)" strokeWidth="12" />
 
-                {/* Shaded Natural Disaster Areas */}
-                <Circle cx="30%" cy="25%" r="35" fill="rgba(37, 99, 235, 0.07)" stroke="#2563eb" strokeWidth="1" strokeDasharray="3,3" />
-                <SvgText x="30%" y="27%" fontSize="7" fontWeight="bold" fill="#2563eb" opacity={0.6} textAnchor="middle">FLOOD</SvgText>
-
-                <Circle cx="68%" cy="20%" r="30" fill="rgba(217, 119, 6, 0.07)" stroke="#d97706" strokeWidth="1" strokeDasharray="3,3" />
-                <SvgText x="68%" y="22%" fontSize="7" fontWeight="bold" fill="#d97706" opacity={0.6} textAnchor="middle">LANDSLIDE</SvgText>
-
-                <Circle cx="60%" cy="72%" r="40" fill="rgba(75, 85, 99, 0.07)" stroke="#4b5563" strokeWidth="1" strokeDasharray="3,3" />
-                <SvgText x="60%" y="74%" fontSize="7" fontWeight="bold" fill="#4b5563" opacity={0.6} textAnchor="middle">QUAKE</SvgText>
-
-                <Circle cx="45%" cy="40%" r="28" fill="rgba(239, 68, 68, 0.07)" stroke="#ef4444" strokeWidth="1" strokeDasharray="3,3" />
-                <SvgText x="45%" y="42%" fontSize="7" fontWeight="bold" fill="#ef4444" opacity={0.6} textAnchor="middle">FIRE</SvgText>
-
-                {targetCoords && selectedV && selectedV.floor === (selectedFloor === "G" ? 0 : Number(selectedFloor)) && (
-                  <Line
-                    x1={`${userPos.x}%`}
-                    y1={`${userPos.y}%`}
-                    x2={`${targetCoords.x}%`}
-                    y2={`${targetCoords.y}%`}
-                    stroke="#dc2626"
-                    strokeWidth="2.5"
-                    strokeDasharray="6,4"
-                    strokeDashoffset={dashOffset}
-                  />
-                )}
               </Svg>
             )}
 
@@ -651,7 +531,9 @@ export function MapView({
             </View>
 
             {victims.map((v, idx) => {
-              const coords = VICTIM_COORDS[v.id] || { x: 50, y: 50 };
+              if (v.isLive) return null;
+              if (!Number.isFinite(v.mapX) || !Number.isFinite(v.mapY)) return null;
+              const coords = { x: v.mapX, y: v.mapY };
               const isSelected = selectedVictim === v.id;
 
               const victimFloorStr = v.floor === 0 ? "G" : String(v.floor);
@@ -769,49 +651,34 @@ export function MapView({
             <View style={styles.mapCompassHud}>
               <Mono style={styles.mapCompassText}>N</Mono>
             </View>
+            {victimGpsList.length === 0 && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: '45%',
+                  alignSelf: 'center',
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(255,255,255,0.92)',
+                }}
+              >
+                <Text style={{ color: '#4b5563', fontSize: 12 }}>
+                  No GPS-based SOS locations received.
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
         <View style={styles.legendContainer}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#2563eb' }]} />
-            <Mono style={styles.legendText}>You</Mono>
-          </View>
-          <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
-            <Mono style={styles.legendText}>Trapped</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#d97706' }]} />
-            <Mono style={styles.legendText}>Injured</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#9ca3af' }]} />
-            <Mono style={styles.legendText}>Lost / Unable to move</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#15803d' }]} />
-            <Mono style={styles.legendText}>Safe</Mono>
+            <Mono style={styles.legendText}>Live SOS (pod GPS location)</Mono>
           </View>
         </View>
 
-        <View style={[styles.legendContainer, { borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)", paddingTop: 8 }]}>
-          <View style={styles.legendItem}>
-            <Mono style={styles.legendText}>Zones:</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <Mono style={styles.legendText}>🌊 Flood</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <Mono style={styles.legendText}>🪨 Landslide</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <Mono style={styles.legendText}>🏢 Quake</Mono>
-          </View>
-          <View style={styles.legendItem}>
-            <Mono style={styles.legendText}>🔥 Fire</Mono>
-          </View>
-        </View>
       </View>
 
       {selectedV && (

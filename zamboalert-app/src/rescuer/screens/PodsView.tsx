@@ -1,19 +1,15 @@
 import React from 'react';
 import { View, Text } from 'react-native';
-import { AlertTriangle } from 'lucide-react-native';
 import { Mono, PulsingDot } from '../components/SharedUI';
 import { styles } from '../theme/styles';
-import { podStatusColors, roleColors } from '../assets/mockData';
 
 export interface PodNode {
   id: string;
-  name: string;
-  location: string;
-  role: string;
-  status: string;
-  battery: number;
-  signal: number;
+  rssi: number;
+  snr: number;
   hops: number;
+  receivedAt: string;
+  hasGpsFix: boolean;
 }
 
 interface PodsViewProps {
@@ -21,128 +17,55 @@ interface PodsViewProps {
 }
 
 export function PodsView({ nodes }: PodsViewProps) {
-  const connected = nodes.filter((n) => n.status === 'connected').length;
-  const syncing = nodes.filter((n) => n.status === 'syncing').length;
-  const offline = nodes.filter((n) => n.status === 'offline').length;
-
   return (
     <View style={styles.viewContainer}>
       <View style={styles.podsOverviewGrid}>
-        {[
-          { label: 'ONLINE', value: connected, color: '#000000' },
-          { label: 'SYNCING', value: syncing, color: '#dc2626' },
-          { label: 'OFFLINE', value: offline, color: '#9ca3af' },
-        ].map(({ label, value, color }) => (
-          <View key={label} style={styles.podsOverviewCard}>
-            <Mono style={[styles.podsOverviewVal, { color }]}>{value}</Mono>
-            <Mono style={styles.podsOverviewLabel}>{label}</Mono>
-          </View>
-        ))}
+        <View style={styles.podsOverviewCard}>
+          <Mono style={[styles.podsOverviewVal, { color: '#000000' }]}>{nodes.length}</Mono>
+          <Mono style={styles.podsOverviewLabel}>RECENT PODS</Mono>
+        </View>
       </View>
 
       <View style={styles.listContainer}>
-        {nodes.map((node) => {
-          const s = podStatusColors[node.status as keyof typeof podStatusColors] || {
-            dot: '#9ca3af',
-            badgeBg: '#f3f4f6',
-            badgeText: '#6b7280',
-          };
-          const isCriticalBattery = node.battery < 20;
-
-          let batteryBarColor = '#22c55e';
-          let batteryTextColor = '#000000';
-          if (node.battery < 20) {
-            batteryBarColor = '#ef4444';
-            batteryTextColor = '#dc2626';
-          } else if (node.battery < 50) {
-            batteryBarColor = '#eab308';
-            batteryTextColor = '#ca8a04';
-          }
-
-          let signalBarColor = '#000000';
-          if (node.signal <= 40) {
-            signalBarColor = '#ef4444';
-          } else if (node.signal <= 70) {
-            signalBarColor = '#eab308';
-          }
-
-          const roleColorsConfig = roleColors[node.role as keyof typeof roleColors] || {
-            bg: '#f3f4f6',
-            text: '#4b5563',
-          };
-
-          return (
+        {nodes.length === 0 ? (
+          <View style={styles.podCard}>
+            <Text style={styles.podCardSubText}>No recent pod telemetry received from the gateway.</Text>
+          </View>
+        ) : nodes.map((node) => (
             <View
               key={node.id}
-              style={[
-                styles.podCard,
-                node.status === 'offline' ? styles.podCardOffline : null,
-              ]}
+              style={styles.podCard}
             >
               <View style={styles.podCardHeader}>
                 <View style={styles.podCardLeft}>
-                  <PulsingDot color={s.dot} />
+                  <PulsingDot color="#22c55e" />
                   <View style={styles.podCardMeta}>
-                    <Mono style={styles.podCardTitle}>{node.name}</Mono>
-                    <Mono style={styles.podCardSubText}>{node.location}</Mono>
+                    <Mono style={styles.podCardTitle}>POD {node.id}</Mono>
+                    <Mono style={styles.podCardSubText}>
+                      {new Date(node.receivedAt).toLocaleTimeString()} · {node.hasGpsFix ? 'GPS fix' : 'No GPS fix'}
+                    </Mono>
                   </View>
                 </View>
-                <View
-                  style={[
-                    styles.miniBadge,
-                    { backgroundColor: roleColorsConfig.bg, paddingHorizontal: 8 },
-                  ]}
-                >
-                  <Text style={[styles.miniBadgeText, { color: roleColorsConfig.text }]}>
-                    {node.role.toUpperCase()}
-                  </Text>
-                </View>
+                <Text style={styles.miniBadgeText}>RECENT</Text>
               </View>
 
               <View style={styles.podStatsRow}>
                 <View style={styles.podStatCol}>
-                  <Text style={styles.podStatLabel}>Battery</Text>
-                  <View style={styles.progressBarBg}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { backgroundColor: batteryBarColor, width: `${node.battery}%` },
-                      ]}
-                    />
-                  </View>
-                  <Mono style={[styles.podStatVal, { color: batteryTextColor }]}>
-                    {node.battery}%
-                  </Mono>
+                  <Text style={styles.podStatLabel}>LoRa RSSI</Text>
+                  <Mono style={styles.podStatVal}>{node.rssi} dBm</Mono>
                 </View>
-
                 <View style={styles.podStatCol}>
-                  <Text style={styles.podStatLabel}>Signal</Text>
-                  <View style={styles.progressBarBg}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { backgroundColor: signalBarColor, width: `${node.signal}%` },
-                      ]}
-                    />
-                  </View>
-                  <Mono style={styles.podStatVal}>{node.signal}%</Mono>
+                  <Text style={styles.podStatLabel}>SNR</Text>
+                  <Mono style={styles.podStatVal}>{node.snr.toFixed(1)} dB</Mono>
                 </View>
-
                 <View style={styles.podStatCol}>
                   <Text style={styles.podStatLabel}>Hops</Text>
                   <Mono style={styles.hopsVal}>{node.hops}</Mono>
                 </View>
               </View>
 
-              {isCriticalBattery && (
-                <View style={styles.podAlertBanner}>
-                  <AlertTriangle size={12} color="#dc2626" />
-                  <Mono style={styles.podAlertText}>Critical battery — replace pod soon</Mono>
-                </View>
-              )}
             </View>
-          );
-        })}
+          ))}
       </View>
     </View>
   );

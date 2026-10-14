@@ -81,7 +81,7 @@
     {
       "nodeId": "4ECA4B70",
       "gatewayId": "GW-79c92df4",
-      "seq": 54,
+      "seq": 336,
       "msgType": 0,
       "fix": true,
       "lat": 6.912345,
@@ -94,10 +94,10 @@
       "nearestVictimId": "",
       "victimStatus": 0,
       "hopCount": 4,
-      "uptime": 630,
-      "loraRssi": -83,
-      "loraSnr": 11.2,
-      "receivedAt": "2026-10-14T03:54:23.294Z"
+      "uptime": 3033,
+      "loraRssi": -80,
+      "loraSnr": 13.5,
+      "receivedAt": "2026-10-14T07:06:48.568Z"
     }
   ]
 }

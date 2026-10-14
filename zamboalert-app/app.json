@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "ZamboAlert Citizen",
+    "name": "ZamboAlert App",
     "slug": "zamboalert-citizen",
     "version": "1.0.0",
+    "icon": "./src/assets/zamboalert.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {

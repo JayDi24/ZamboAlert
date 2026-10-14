@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native
 import Svg, { Circle, Line } from 'react-native-svg';
 import { ArrowUp } from 'lucide-react-native';
 import { Mono, PulsingDot } from './SharedUI';
-import { situationColors } from '../assets/mockData';
+import { situationColors } from '../assets/displayConfig';
 import { styles } from '../theme/styles';
 import { useAnimatedValue } from '../utils/hooks';
 
@@ -27,28 +27,51 @@ export function RadarView({
   onSelect: (id: string) => void;
 }) {
   const target = victims.find((v) => v.id === selected) ?? victims[0];
-  const bearing = useAnimatedValue(target.bearing);
+  const bearing = useAnimatedValue(target?.bearing ?? 0);
   const arrowAngle = bearing - 180;
+  const directionalVictims = victims.filter(
+    (victim) => Number.isFinite(victim.bearing) && Number.isFinite(victim.distance),
+  );
+  const hasDirection = Boolean(
+    target && Number.isFinite(target.bearing) && Number.isFinite(target.distance),
+  );
   const compassLabels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  if (!target) {
+    return (
+      <View style={styles.viewContainer}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>No active victim alerts</Text>
+          <Mono style={styles.cardSubtitle}>Waiting for live SOS telemetry from the gateway.</Mono>
+        </View>
+      </View>
+    );
+  }
+  const targetColors = situationColors[target.situation as keyof typeof situationColors] || {
+    text: "#ffffff",
+    bg: "#dc2626",
+    dot: "#ef4444",
+  };
 
   return (
     <View style={styles.viewContainer}>
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View>
-            <Mono style={styles.cardSubtitle}>BEARING TO TARGET</Mono>
+            <Mono style={styles.cardSubtitle}>
+              {hasDirection ? "BEARING TO TARGET" : "LIVE VICTIM ALERT"}
+            </Mono>
             <Text style={styles.cardTitle}>{target.label}</Text>
           </View>
           <View
             style={[
               styles.badge,
-              { backgroundColor: situationColors[target.situation as keyof typeof situationColors].bg },
+              { backgroundColor: targetColors.bg },
             ]}
           >
             <Text
               style={[
                 styles.badgeText,
-                { color: situationColors[target.situation as keyof typeof situationColors].text },
+                { color: targetColors.text },
               ]}
             >
               {target.situation.toUpperCase()}
@@ -56,8 +79,15 @@ export function RadarView({
           </View>
         </View>
 
-        <View style={styles.radarWrapper}>
-          <View style={styles.radarCircle}>
+        {!hasDirection ? (
+          <View style={styles.radarWrapper}>
+            <Mono style={styles.cardSubtitle}>
+              Direction unavailable — gateway telemetry does not include victim bearing or distance.
+            </Mono>
+          </View>
+        ) : (
+          <View style={styles.radarWrapper}>
+            <View style={styles.radarCircle}>
             <Svg width="208" height="208" style={StyleSheet.absoluteFill}>
               <Circle cx="104" cy="104" r="102" stroke="rgba(0,0,0,0.1)" strokeWidth="2" fill="none" />
               <Circle cx="104" cy="104" r="80" stroke="rgba(0,0,0,0.06)" strokeWidth="1" fill="none" />
@@ -108,9 +138,9 @@ export function RadarView({
               </View>
             </View>
 
-            {victims.map((v) => {
+            {directionalVictims.map((v) => {
               const a = ((v.bearing - 180) * Math.PI) / 180;
-              const maxDist = Math.max(...victims.map((x) => x.distance));
+              const maxDist = Math.max(...directionalVictims.map((x) => x.distance));
               const ratio = Math.min(v.distance / (maxDist || 1), 1) * 56;
               const bx = 104 + ratio * Math.sin(a);
               const by = 104 - ratio * Math.cos(a);
@@ -155,26 +185,29 @@ export function RadarView({
                 />
               );
             })}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.statsRow}>
           <View style={styles.statCell}>
-            <Mono style={styles.statVal}>{Math.round(bearing)}°</Mono>
+            <Mono style={styles.statVal}>
+              {Number.isFinite(target.bearing) ? `${Math.round(bearing)}°` : "—"}
+            </Mono>
             <Text style={styles.statLabel}>BEARING</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCell}>
             <Mono style={[styles.statVal, styles.textRed]}>
-              {target.distance.toFixed(1)}
-              <Text style={{ fontSize: 14 }}>m</Text>
+              {Number.isFinite(target.distance) ? target.distance.toFixed(1) : "—"}
+              {Number.isFinite(target.distance) && <Text style={{ fontSize: 14 }}>m</Text>}
             </Mono>
             <Text style={styles.statLabel}>DISTANCE</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCell}>
             <Mono style={styles.statVal}>
-              {target.floor > 0 ? `+${target.floor}` : target.floor}
+              {Number.isFinite(target.floor) ? (target.floor > 0 ? `+${target.floor}` : target.floor) : "—"}
             </Mono>
             <Text style={styles.statLabel}>FLOOR</Text>
           </View>
@@ -184,7 +217,7 @@ export function RadarView({
       <View style={styles.listContainer}>
         {victims.map((v) => {
           const isSelected = v.id === selected;
-          const config = situationColors[v.situation as keyof typeof situationColors];
+          const config = situationColors[v.situation as keyof typeof situationColors] || targetColors;
 
           return (
             <TouchableOpacity
@@ -201,11 +234,11 @@ export function RadarView({
                   <View style={styles.victimCardMeta}>
                     <Mono style={styles.victimCardTitle}>{v.label}</Mono>
                     <View style={styles.victimCardSubRow}>
-                      <Mono style={styles.victimCardSubText}>{v.distance.toFixed(1)} m</Mono>
+                      <Mono style={styles.victimCardSubText}>
+                        {Number.isFinite(v.signalStrength) ? `RSSI ${v.signalStrength} dBm` : "RSSI unavailable"}
+                      </Mono>
                       <Text style={styles.bullet}>·</Text>
-                      <Mono style={styles.victimCardSubText}>{v.bearing}°</Mono>
-                      <Text style={styles.bullet}>·</Text>
-                      <Mono style={styles.victimCardSubText}>Floor {v.floor}</Mono>
+                      <Mono style={styles.victimCardSubText}>{v.lastPing || "Live alert"}</Mono>
                       {v.disasterType && (
                         <>
                           <Text style={styles.bullet}>·</Text>

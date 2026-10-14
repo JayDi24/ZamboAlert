@@ -28,17 +28,11 @@ import { Mono, PulsingDot } from "../components/SharedUI";
 import { styles } from "../theme/styles";
 import { RadarView } from "../components/RadarView";
 import { MapView } from "../components/MapView";
+import { fetchPodTelemetry, PodTelemetry } from "../services/telemetry";
 
 import {
-  VICTIMS,
-  VICTIM_COORDS,
-  MESH_NODES,
-  LOG,
   situationColors,
-  podStatusColors,
-  logTypeColors,
-  roleColors,
-} from "../assets/mockData";
+} from "../assets/displayConfig";
 
 import { PodsView } from "../screens/PodsView";
 import { LogView } from "../screens/LogView";
@@ -55,12 +49,39 @@ export function MainTabNavigator() {
   const [selectedFloor, setSelectedFloor] = useState("-1");
   const [userPos, setUserPos] = useState({ x: 47, y: 48 });
   const [isNavigating, setIsNavigating] = useState(false);
-  const [selectedVictim, setSelectedVictim] = useState(VICTIMS[0].id);
+  const [selectedVictim, setSelectedVictim] = useState("");
 
-  const [victimsList, setVictimsList] = useState<any[]>(VICTIMS);
+  const [victimsList, setVictimsList] = useState<any[]>([]);
   const [updateModalVictimId, setUpdateModalVictimId] = useState<string | null>(null);
-  const [logs, setLogs] = useState(LOG);
+  const [logs, setLogs] = useState<any[]>([]);
   const [rescuerEmergency, setRescuerEmergency] = useState<"trapped" | "injured" | null>(null);
+  const [gatewayTelemetry, setGatewayTelemetry] = useState<PodTelemetry[]>([]);
+  const [gatewayStatus, setGatewayStatus] = useState<"connecting" | "online" | "offline">("connecting");
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const pollTelemetry = async () => {
+      try {
+        const reports = await fetchPodTelemetry();
+        if (!active) return;
+        setGatewayTelemetry(reports);
+        setGatewayStatus("online");
+      } catch (error) {
+        console.error("Failed to fetch gateway telemetry", error);
+        if (active) setGatewayStatus("offline");
+      }
+
+      if (active) timer = setTimeout(pollTelemetry, 5000);
+    };
+
+    void pollTelemetry();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const addLog = (
     type: string,
@@ -113,75 +134,58 @@ export function MainTabNavigator() {
     );
   };
 
-  const liveVictims = victimsList.map((v) => {
-    const coords = VICTIM_COORDS[v.id];
-    if (!coords) return v;
-    const dx = coords.x - userPos.x;
-    const dy = coords.y - userPos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) * 0.8;
+  const liveVictims = victimsList;
 
-    let bearing = (Math.atan2(dx, -dy) * 180) / Math.PI;
-    if (bearing < 0) bearing += 360;
+  const liveSosVictims = gatewayTelemetry
+    .filter(() => gatewayStatus !== "offline")
+    .filter((report) => report.msgType === 1 || report.bleVictims > 0)
+    .map((report) => {
+      const hasGpsFix = report.fix && report.sats > 0 && report.lat !== null && report.lng !== null;
+      const situationByStatus: Record<number, string> = {
+        1: "safe",
+        2: "injured",
+        3: "trapped",
+        4: "lost or unable to move",
+      };
+      return {
+        id: `LIVE-${report.nodeId}`,
+        label: report.nearestVictimId
+          ? `SOS ${report.nearestVictimId}`
+          : `SOS ${report.nodeId}`,
+        distance: null,
+        bearing: null,
+        floor: null,
+        signalStrength: report.loraRssi,
+        situation: situationByStatus[report.victimStatus] || "SOS",
+        lastPing: "live",
+        disasterType: "",
+        lat: hasGpsFix ? report.lat : null,
+        lng: hasGpsFix ? report.lng : null,
+        hasLocation: hasGpsFix,
+        hasGpsFix,
+        isLive: true,
+      };
+    });
 
-    return {
-      ...v,
-      distance: dist,
-      bearing: Math.round(bearing),
-    };
-  });
+  useEffect(() => {
+    if (!selectedVictim || ![...liveVictims, ...liveSosVictims].some((victim) => victim.id === selectedVictim)) {
+      setSelectedVictim(liveSosVictims[0]?.id || liveVictims[0]?.id || "");
+    }
+  }, [selectedVictim, liveSosVictims, liveVictims]);
 
   const handleSelectVictim = (id: string) => {
     setSelectedVictim(id);
-    const victim = liveVictims.find((v) => v.id === id);
+    const victim = [...liveVictims, ...liveSosVictims].find((v) => v.id === id);
     if (victim) {
-      const flStr = victim.floor === 0 ? "G" : String(victim.floor);
-      setSelectedFloor(flStr);
+      if (!victim.isLive) {
+        const flStr = victim.floor === 0 ? "G" : String(victim.floor);
+        setSelectedFloor(flStr);
+      } else {
+        setSelectedFloor("G");
+      }
       setTab("map");
     }
   };
-
-  useEffect(() => {
-    if (!isNavigating) return;
-
-    const targetV = liveVictims.find((v) => v.id === selectedVictim);
-    if (!targetV) {
-      setIsNavigating(false);
-      return;
-    }
-
-    const targetCoords = VICTIM_COORDS[targetV.id];
-    if (!targetCoords) {
-      setIsNavigating(false);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setUserPos((prev) => {
-        const dx = targetCoords.x - prev.x;
-        const dy = targetCoords.y - prev.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 1.5) {
-          clearInterval(interval);
-          setIsNavigating(false);
-          toast.success(`${targetV.label} reached!`, {
-            description: `Please update the victim's situation condition.`,
-          });
-          setUpdateModalVictimId(targetV.id);
-          return targetCoords;
-        }
-
-        const step = 2.5;
-        const ratio = step / dist;
-        return {
-          x: prev.x + dx * Math.min(ratio, 1),
-          y: prev.y + dy * Math.min(ratio, 1),
-        };
-      });
-    }, 120);
-
-    return () => clearInterval(interval);
-  }, [isNavigating, selectedVictim]);
 
   const tabs = [
     { id: "radar", icon: Crosshair, label: "Radar" },
@@ -213,7 +217,7 @@ export function MainTabNavigator() {
           <View style={[styles.row, { marginTop: 4 }]}>
             <PulsingDot color="#ef4444" />
             <Mono style={styles.headerSubtitle}>
-              {liveVictims.filter((v) => v.situation !== "lost or unable to move").length} tracked · {MESH_NODES.filter((n) => n.status === "connected").length} pods live
+              {liveSosVictims.length} live SOS · {gatewayTelemetry.length} pods · gateway {gatewayStatus}
             </Mono>
           </View>
         </View>
@@ -234,6 +238,26 @@ export function MainTabNavigator() {
             RESCUER EMERGENCY: {rescuerEmergency.toUpperCase()} ON FLOOR {selectedFloor}
           </Text>
         </View>
+      )}
+
+      {liveSosVictims.length > 0 && (
+        <TouchableOpacity
+          onPress={() => handleSelectVictim(liveSosVictims[0].id)}
+          style={styles.criticalAlertBanner}
+        >
+          <View style={styles.row}>
+            <AlertTriangle size={14} color="#ffffff" style={{ marginRight: 6 }} />
+            <Mono style={styles.criticalAlertText}>
+              LIVE SOS — {liveSosVictims[0].label}
+              {liveSosVictims[0].hasGpsFix
+                ? ""
+                : liveSosVictims[0].hasLocation
+                ? " · APPROXIMATE LOCATION"
+                : " · LOCATION UNAVAILABLE"}
+            </Mono>
+          </View>
+          <ChevronRight size={14} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
       )}
 
       {showCriticalAlert && criticalVictim && (
@@ -258,14 +282,14 @@ export function MainTabNavigator() {
       >
         {tab === "radar" && (
           <RadarView
-            victims={liveVictims}
+            victims={[...liveVictims, ...liveSosVictims]}
             selected={selectedVictim}
             onSelect={handleSelectVictim}
           />
         )}
         {tab === "map" && (
           <MapView
-            victims={liveVictims}
+            victims={[...liveVictims, ...liveSosVictims]}
             selectedVictim={selectedVictim}
             onSelectVictim={handleSelectVictim}
             selectedFloor={selectedFloor}
@@ -280,7 +304,18 @@ export function MainTabNavigator() {
             onUpdateRescuerEmergency={handleUpdateRescuerEmergency}
           />
         )}
-        {tab === "pods" && <PodsView nodes={MESH_NODES} />}
+        {tab === "pods" && (
+          <PodsView
+            nodes={gatewayTelemetry.map((report) => ({
+              id: report.nodeId,
+              rssi: report.loraRssi,
+              snr: report.loraSnr,
+              hops: report.hopCount,
+              receivedAt: report.receivedAt,
+              hasGpsFix: report.fix && report.sats > 0,
+            }))}
+          />
+        )}
         {tab === "log" && (
           <LogView
             log={logs}
@@ -292,17 +327,13 @@ export function MainTabNavigator() {
               const newVictim = {
                 id: newId,
                 label: label.toUpperCase(),
-                distance: Math.random() * 30 + 10,
-                bearing: Math.floor(Math.random() * 360),
-                floor: 0,
-                signalStrength: 75,
+                distance: null,
+                bearing: null,
+                floor: null,
+                signalStrength: null,
                 situation: (situation || "safe") as any,
                 lastPing: "just now",
-                disasterType: disaster || "Flood",
-              };
-              VICTIM_COORDS[newId] = {
-                x: Math.floor(Math.random() * 40 + 30),
-                y: Math.floor(Math.random() * 40 + 30),
+                disasterType: disaster || "",
               };
               setVictimsList((prev) => [...prev, newVictim]);
               return newId;

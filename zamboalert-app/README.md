@@ -54,6 +54,7 @@ src/
 ```
 
 ## Notes
-- BLE broadcasting is currently **mocked/simulated** — real BLE advertising requires a custom dev build (not Expo Go)
+- Citizen SOS uses native BLE advertising; install a development or production build (Expo Go does not include the native advertiser).
+- The rescuer app starts with no seeded victims, pods, or logs and polls the gateway backend for recent pod telemetry every five seconds. Live SOS packets with a GPS satellite fix appear on the GPS map. Keep the phone and backend on the same LAN and configure `src/config.ts` with the backend computer's LAN address.
 - The rescuer dashboard is under development — rescuer accounts show a placeholder screen
 - Authentication uses the sibling `backend` service. Configure its Gmail SMTP environment variables to enable signup and login email verification; see `../backend/README.md`.
