@@ -55,5 +55,49 @@
       "mfaSecret": "",
       "contactNumber": "09318376233"
     }
+  ],
+  "podTelemetry": [
+    {
+      "nodeId": "AA11BB22",
+      "gatewayId": "GW-79c92df4",
+      "seq": 901,
+      "msgType": 0,
+      "fix": true,
+      "lat": 6.912345,
+      "lng": 122.079876,
+      "gatewayLat": 6.912345,
+      "gatewayLng": 122.079876,
+      "sats": 6,
+      "bleVictims": 0,
+      "nearestRssi": -127,
+      "nearestVictimId": "",
+      "victimStatus": 0,
+      "hopCount": 4,
+      "uptime": 4,
+      "loraRssi": -65,
+      "loraSnr": 8.5,
+      "receivedAt": "2026-10-14T03:22:28.976Z"
+    },
+    {
+      "nodeId": "4ECA4B70",
+      "gatewayId": "GW-79c92df4",
+      "seq": 54,
+      "msgType": 0,
+      "fix": true,
+      "lat": 6.912345,
+      "lng": 122.079876,
+      "gatewayLat": 6.912345,
+      "gatewayLng": 122.079876,
+      "sats": 0,
+      "bleVictims": 0,
+      "nearestRssi": -127,
+      "nearestVictimId": "",
+      "victimStatus": 0,
+      "hopCount": 4,
+      "uptime": 630,
+      "loraRssi": -83,
+      "loraSnr": 11.2,
+      "receivedAt": "2026-10-14T03:54:23.294Z"
+    }
   ]
 }

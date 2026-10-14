@@ -98,38 +98,10 @@ unsigned long lastWifiAttempt = 0;
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-// ---------- LoRa RX queue (filled by ISR, drained in loop) ----------
-#define LORA_RX_QUEUE_SIZE 8
-struct LoraRx {
-    uint8_t data[sizeof(MeshPacket)];
-    int len;
-    int rssi;
-    float snr;
-};
-volatile LoraRx rxQueue[LORA_RX_QUEUE_SIZE];
-volatile uint8_t rxHead = 0;
-volatile uint8_t rxTail = 0;
-
 const char* rssiQuality(int rssi) {
     if (rssi >= -50) return "Strong";
     if (rssi >= -70) return "Medium";
     return "Weak";
-}
-
-void onLoraReceive(int packetSize) {
-    uint8_t next = (rxHead + 1) % LORA_RX_QUEUE_SIZE;
-    if (next == rxTail) {
-        while (LoRa.available()) LoRa.read();
-        return;
-    }
-    int len = 0;
-    while (LoRa.available() && len < (int)sizeof(MeshPacket)) {
-        rxQueue[rxHead].data[len++] = (uint8_t)LoRa.read();
-    }
-    rxQueue[rxHead].len = len;
-    rxQueue[rxHead].rssi = LoRa.packetRssi();
-    rxQueue[rxHead].snr = LoRa.packetSnr();
-    rxHead = next;
 }
 
 bool setupLora() {
@@ -142,7 +114,6 @@ bool setupLora() {
     LoRa.setCodingRate4(5);
     LoRa.setSyncWord(LORA_SYNC_WORD);
     LoRa.enableCrc();
-    LoRa.onReceive(onLoraReceive);
     LoRa.receive();
     return true;
 }
@@ -231,73 +202,86 @@ void buildJson(const MeshPacket& pkt, int rssi, float snr, char* out, size_t out
         pkt.hopCount, pkt.uptimeSec, rssi, snr);
 }
 
-void handleLoraRx() {
-    while (rxTail != rxHead) {
-        uint8_t data[sizeof(MeshPacket)];
-        int len = rxQueue[rxTail].len;
-        memcpy(data, (const void*)rxQueue[rxTail].data, len);
-        int rssi = rxQueue[rxTail].rssi;
-        float snr = rxQueue[rxTail].snr;
-        rxTail = (rxTail + 1) % LORA_RX_QUEUE_SIZE;
+void processPacket(const uint8_t* data, int len, int rssi, float snr) {
+    MeshPacket pkt;
+    if (!decodePacket(data, len, pkt)) {
+        Serial.print("[LoRa RX] Invalid packet: len=");
+        Serial.print(len);
+        Serial.print(" (expected ");
+        Serial.print((int)sizeof(MeshPacket));
+        Serial.print("), magic=0x");
+        Serial.print(len > 0 ? data[0] : 0, HEX);
+        Serial.println(" - check sync word or RF saturation (move devices further apart)");
+        return;
+    }
+    rxCount++;
 
-        MeshPacket pkt;
-        if (!decodePacket(data, len, pkt)) {
-            Serial.println("[LoRa RX] bad/foreign packet, ignored");
-            continue;
-        }
-        rxCount++;
+    // ---- Always: print to Serial (this IS the UART forward to the
+    // local server if it's plugged in via USB and reading this port) ----
+    Serial.println();
+    Serial.print("========== RX #"); Serial.print(rxCount);
+    Serial.print(" node="); Serial.print(pkt.nodeId, HEX);
+    Serial.print(" seq="); Serial.println(pkt.seq);
+    Serial.print("Type: "); Serial.println(pkt.msgType == ZA_MSG_SOS ? "SOS [ALERT]" : "telemetry");
+    if (pkt.gpsFix) {
+        Serial.print("Pos : "); Serial.print(pkt.lat_e6 / 1e6, 6);
+        Serial.print(", "); Serial.println(pkt.lng_e6 / 1e6, 6);
+    } else {
+        Serial.println("Pos : no fix");
+    }
+    Serial.print("Victims nearby: "); Serial.print(pkt.bleVictims);
+    Serial.print("  Nearest RSSI: "); Serial.println(pkt.nearestRssi);
+    Serial.print("Hops left: "); Serial.print(pkt.hopCount);
+    Serial.print("  LoRa RSSI: "); Serial.print(rssi);
+    Serial.print(" ["); Serial.print(rssiQuality(rssi)); Serial.println("]");
 
-        // ---- Always: print to Serial (this IS the UART forward to the
-        // local server if it's plugged in via USB and reading this port) ----
-        Serial.println();
-        Serial.print("========== RX #"); Serial.print(rxCount);
-        Serial.print(" node="); Serial.print(pkt.nodeId, HEX);
-        Serial.print(" seq="); Serial.println(pkt.seq);
-        Serial.print("Type: "); Serial.println(pkt.msgType == ZA_MSG_SOS ? "SOS" : "telemetry");
-        if (pkt.gpsFix) {
-            Serial.print("Pos : "); Serial.print(pkt.lat_e6 / 1e6, 6);
-            Serial.print(", "); Serial.println(pkt.lng_e6 / 1e6, 6);
-        } else {
-            Serial.println("Pos : no fix");
-        }
-        Serial.print("Victims nearby: "); Serial.print(pkt.bleVictims);
-        Serial.print("  Nearest RSSI: "); Serial.println(pkt.nearestRssi);
-        Serial.print("Hops left: "); Serial.print(pkt.hopCount);
-        Serial.print("  LoRa RSSI: "); Serial.print(rssi);
-        Serial.print(" ["); Serial.print(rssiQuality(rssi)); Serial.println("]");
+    char json[384];
+    buildJson(pkt, rssi, snr, json, sizeof(json));
 
-        char json[384];
-        buildJson(pkt, rssi, snr, json, sizeof(json));
-
-        // This line is the actual machine-readable UART forward: the local
-        // server can read this serial port and parse any line starting with
-        // "JSON:" rather than you writing a separate binary UART protocol.
-        Serial.print("JSON:");
-        Serial.println(json);
+    // Machine-readable UART forward
+    Serial.print("JSON:");
+    Serial.println(json);
 
 #if FORWARD_VIA_HTTP
-        if (WiFi.status() == WL_CONNECTED) {
-            HTTPClient http;
-            http.setTimeout(4000);
-            http.begin(SERVER_URL);
-            http.addHeader("Content-Type", "application/json");
-            http.addHeader("X-Gateway-Key", GATEWAY_API_KEY);
-            int code = http.POST((uint8_t*)json, strlen(json));
-            http.end();
-            Serial.print("HTTP forward: ");
-            Serial.println((code > 0 && code < 300) ? "OK" : ("FAILED code=" + String(code)));
-        }
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        http.setTimeout(4000);
+        http.begin(SERVER_URL);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-Gateway-Key", GATEWAY_API_KEY);
+        int code = http.POST((uint8_t*)json, strlen(json));
+        http.end();
+        Serial.print("HTTP forward: ");
+        Serial.println((code > 0 && code < 300) ? "OK" : ("FAILED code=" + String(code)));
+    } else {
+        Serial.println("HTTP forward: skipped (WiFi not connected)");
+    }
 #endif
 
 #if FORWARD_VIA_MQTT
-        if (mqttClient.connected()) {
-            bool ok = mqttClient.publish(MQTT_TOPIC, json);
-            Serial.print("MQTT publish: ");
-            Serial.println(ok ? "OK" : "FAILED");
-        }
+    if (mqttClient.connected()) {
+        bool ok = mqttClient.publish(MQTT_TOPIC, json);
+        Serial.print("MQTT publish: ");
+        Serial.println(ok ? "OK" : "FAILED");
+    }
 #endif
 
-        Serial.println("==============================");
+    Serial.println("==============================");
+}
+
+void handleLoraRx() {
+    int packetSize = LoRa.parsePacket();
+    if (packetSize > 0) {
+        uint8_t data[sizeof(MeshPacket)];
+        int len = 0;
+        while (LoRa.available() && len < (int)sizeof(data)) {
+            data[len++] = (uint8_t)LoRa.read();
+        }
+        while (LoRa.available()) LoRa.read();
+        int rssi = LoRa.packetRssi();
+        float snr = LoRa.packetSnr();
+        processPacket(data, len, rssi, snr);
+        LoRa.receive(); // re-enable continuous reception
     }
 }
 
@@ -320,7 +304,7 @@ void setup() {
         Serial.println("LoRa init FAILED - check SX1278 wiring/power. Halting.");
         while (true) delay(1000);
     }
-    Serial.println("LoRa mesh radio listening.");
+    Serial.println("LoRa mesh radio listening @ 433MHz.");
 
 #if FORWARD_VIA_HTTP || FORWARD_VIA_MQTT
     connectWifi();
@@ -339,6 +323,7 @@ void setup() {
     Serial.println();
     Serial.println("Wiring (no GPS on this node - fixed location above):");
     Serial.println("SX1278 -> 3V3/GND, SCK18 MISO19 MOSI23 NSS5 RST14 DIO0 26");
+    Serial.println("Interactive testing: Type 't' in Serial for test Telemetry, 's' for test SOS.");
 }
 
 void loop() {
@@ -349,5 +334,62 @@ void loop() {
     maintainMqtt();
 #endif
     handleLoraRx();
+
+    // Check for interactive Serial test commands
+    if (Serial.available()) {
+        char ch = Serial.read();
+        if (ch == 't' || ch == 'T') {
+            Serial.println("[TEST] Generating simulated Telemetry to test HTTP / Dashboard...");
+            MeshPacket testPkt;
+            testPkt.magic = ZA_MAGIC;
+            testPkt.msgType = ZA_MSG_TELEMETRY;
+            testPkt.nodeId = 0xAA11BB22;
+            testPkt.seq = 901;
+            testPkt.lat_e6 = (int32_t)(GATEWAY_LAT * 1e6);
+            testPkt.lng_e6 = (int32_t)(GATEWAY_LNG * 1e6);
+            testPkt.sats = 6;
+            testPkt.gpsFix = 1;
+            testPkt.bleVictims = 0;
+            testPkt.nearestRssi = -127;
+            memset(testPkt.victimId, 0, sizeof(testPkt.victimId));
+            testPkt.victimStatus = 0;
+            testPkt.hopCount = 4;
+            testPkt.uptimeSec = millis() / 1000;
+            processPacket((const uint8_t*)&testPkt, sizeof(MeshPacket), -65, 8.5);
+        } else if (ch == 's' || ch == 'S') {
+            Serial.println("[TEST] Generating simulated SOS to test HTTP / Dashboard...");
+            MeshPacket testPkt;
+            testPkt.magic = ZA_MAGIC;
+            testPkt.msgType = ZA_MSG_SOS;
+            testPkt.nodeId = 0xAA11BB22;
+            testPkt.seq = 902;
+            testPkt.lat_e6 = (int32_t)(GATEWAY_LAT * 1e6);
+            testPkt.lng_e6 = (int32_t)(GATEWAY_LNG * 1e6);
+            testPkt.sats = 6;
+            testPkt.gpsFix = 1;
+            testPkt.bleVictims = 1;
+            testPkt.nearestRssi = -55;
+            strncpy(testPkt.victimId, "VIC-01", 8);
+            testPkt.victimStatus = 0;
+            testPkt.hopCount = 4;
+            testPkt.uptimeSec = millis() / 1000;
+            processPacket((const uint8_t*)&testPkt, sizeof(MeshPacket), -55, 9.0);
+        }
+    }
+
+    // Periodic heartbeat on Serial so user knows gateway is healthy and listening
+    static unsigned long lastHeartbeat = 0;
+    unsigned long now = millis();
+    if (now - lastHeartbeat >= 20000) {
+        lastHeartbeat = now;
+        Serial.print("[Gateway Status] Radio listening @ 433MHz | Packets received: ");
+        Serial.print(rxCount);
+#if FORWARD_VIA_HTTP
+        Serial.print(" | WiFi: ");
+        Serial.print(WiFi.status() == WL_CONNECTED ? "Connected (" + WiFi.localIP().toString() + ")" : "Disconnected");
+#endif
+        Serial.println(" | Tip: Send 't' or 's' in Serial to test HTTP");
+    }
+
     delay(10);
 }

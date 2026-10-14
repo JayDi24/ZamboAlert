@@ -5,6 +5,8 @@
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include "mesh_packet.h"
 #include "config.h"
 
@@ -220,11 +222,15 @@ void scanForVictims() {
     digitalWrite(LED_PIN, proximityActive ? HIGH : LOW);
     if (BUZZER_PIN >= 0) digitalWrite(BUZZER_PIN, proximityActive ? HIGH : LOW);
 
-    if (proximityActive && !wasActive) {
-        // Send an out-of-cycle SOS packet immediately, don't wait for the
-        // next routine telemetry interval.
-        extern void sendPacket(uint8_t msgType);
-        sendPacket(ZA_MSG_SOS);
+    static unsigned long lastSosPacketTx = 0;
+    if (victimCount > 0) {
+        // Send an out-of-cycle SOS packet immediately on detection, and repeat every 5s while beacon is active
+        if (!wasActive || (millis() - lastSosPacketTx >= 5000)) {
+            lastSosPacketTx = millis();
+            Serial.println("[BLE SOS] Active SOS beacon detected! Transmitting SOS via LoRa...");
+            extern void sendPacket(uint8_t msgType);
+            sendPacket(ZA_MSG_SOS);
+        }
     }
 }
 
@@ -267,18 +273,28 @@ bool setupLora() {
     LoRa.setSyncWord(LORA_SYNC_WORD);
     LoRa.setTxPower(LORA_TX_POWER_DBM);
     LoRa.enableCrc();
-    LoRa.onReceive(onLoraReceive);
     LoRa.receive();
     return true;
 }
 
 void transmitPacket(const MeshPacket& pkt) {
+    Serial.println("[LoRa TX] 1. Preparing payload...");
     uint8_t buf[sizeof(MeshPacket)];
     encodePacket(pkt, buf);
+
+    Serial.println("[LoRa TX] 2. LoRa.beginPacket()...");
     LoRa.beginPacket();
+
+    Serial.println("[LoRa TX] 3. LoRa.write()...");
     LoRa.write(buf, sizeof(buf));
+
+    Serial.println("[LoRa TX] 4. LoRa.endPacket()...");
     LoRa.endPacket();
-    LoRa.receive(); // back to RX after TX
+
+    Serial.println("[LoRa TX] 5. LoRa.receive()...");
+    LoRa.receive();
+
+    Serial.println("[LoRa TX] 6. Packet successfully transmitted!");
 }
 
 // Builds and sends this pod's own telemetry/SOS packet.
@@ -294,6 +310,15 @@ void sendPacket(uint8_t msgType) {
     pkt.lat_e6 = fix ? (int32_t)(gps.location.lat() * 1e6) : 0;
     pkt.lng_e6 = fix ? (int32_t)(gps.location.lng() * 1e6) : 0;
     pkt.sats = gps.satellites.isValid() ? (uint8_t)gps.satellites.value() : 0;
+
+#if GPS_INDOOR_TEST_FALLBACK
+    if (!fix) {
+        pkt.gpsFix = 1;
+        pkt.lat_e6 = (int32_t)(FALLBACK_LAT * 1e6);
+        pkt.lng_e6 = (int32_t)(FALLBACK_LNG * 1e6);
+        pkt.sats = 0; // indicates indoor fallback coordinates
+    }
+#endif
 
     pkt.bleVictims = (uint8_t)victimCount;
     pkt.nearestRssi = (int8_t)nearestVictimRssi;
@@ -337,40 +362,34 @@ void relayPacket(MeshPacket pkt) {
 }
 
 void handleLoraRx() {
-    while (rxTail != rxHead) {
+    int packetSize = LoRa.parsePacket();
+    if (packetSize > 0) {
         uint8_t data[sizeof(MeshPacket)];
-        int len = rxQueue[rxTail].len;
-        memcpy(data, (const void*)rxQueue[rxTail].data, len);
-        int rssi = rxQueue[rxTail].rssi;
-        float snr = rxQueue[rxTail].snr;
-        rxTail = (rxTail + 1) % LORA_RX_QUEUE_SIZE;
+        int len = 0;
+        while (LoRa.available() && len < (int)sizeof(data)) {
+            data[len++] = (uint8_t)LoRa.read();
+        }
+        while (LoRa.available()) LoRa.read();
 
         MeshPacket pkt;
-        if (!decodePacket(data, len, pkt)) {
-            Serial.println("[LoRa RX] bad/foreign packet, ignored");
-            continue;
+        if (decodePacket(data, len, pkt)) {
+            if (pkt.nodeId != nodeId && !seenFilter.seenBefore(pkt.nodeId, pkt.seq)) {
+                Serial.println();
+                Serial.print("[LoRa RX] from node=");
+                Serial.print(pkt.nodeId, HEX);
+                Serial.print(" seq="); Serial.print(pkt.seq);
+                Serial.print(" type="); Serial.println(pkt.msgType == ZA_MSG_SOS ? "SOS" : "telemetry");
+                relayPacket(pkt);
+            }
         }
-        if (pkt.nodeId == nodeId) continue; // our own packet looped back, ignore
-
-        Serial.println();
-        Serial.print("[LoRa RX] node=");
-        Serial.print(pkt.nodeId, HEX);
-        Serial.print(" seq="); Serial.print(pkt.seq);
-        Serial.print(" type="); Serial.print(pkt.msgType == ZA_MSG_SOS ? "SOS" : "telemetry");
-        Serial.print(" RSSI="); Serial.print(rssi);
-        Serial.print(" SNR="); Serial.println(snr, 1);
-
-        if (seenFilter.seenBefore(pkt.nodeId, pkt.seq)) {
-            Serial.println("  (duplicate, already relayed - suppressed)");
-            continue;
-        }
-        relayPacket(pkt);
+        LoRa.receive();
     }
 }
 
 // =====================================================================
 
 void setup() {
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Disable brownout detector to prevent reboot during radio current surges
     Serial.begin(115200);
     delay(1000);
 
@@ -401,9 +420,11 @@ void setup() {
     Serial.println("LoRa mesh radio ready.");
 
     setupBle();
-    Serial.print("BLE scanning for victim beacons named \"");
+    Serial.print("BLE scanning for victim beacons (UUID: ");
+    Serial.print(SOS_SERVICE_UUID);
+    Serial.print(" or prefix \"");
     Serial.print(VICTIM_BLE_NAME_PREFIX);
-    Serial.println("*\".");
+    Serial.println("*\").");
 
     Serial.println();
     Serial.println("Wiring:");
@@ -411,11 +432,24 @@ void setup() {
     Serial.println("SX1278 -> 3V3/GND, SCK18 MISO19 MOSI23 NSS5 RST14 DIO0 26");
     Serial.print("Buzzer -> GPIO"); Serial.println(BUZZER_PIN);
     Serial.print("LED    -> GPIO"); Serial.println(LED_PIN);
+    Serial.println("Interactive testing: Type 's' in Serial to trigger test SOS, 't' for telemetry.");
 }
 
 void loop() {
     readGps();
     const unsigned long now = millis();
+
+    // Check for interactive Serial test commands
+    if (Serial.available()) {
+        char ch = Serial.read();
+        if (ch == 's' || ch == 'S') {
+            Serial.println("[TEST] Manual SOS triggered via Serial input!");
+            sendPacket(ZA_MSG_SOS);
+        } else if (ch == 't' || ch == 'T') {
+            Serial.println("[TEST] Manual Telemetry triggered via Serial input!");
+            sendPacket(ZA_MSG_TELEMETRY);
+        }
+    }
 
     if (now - lastGpsReport >= 30000) {
         lastGpsReport = now;
@@ -432,7 +466,7 @@ void loop() {
     if ((uint32_t)(now - lastTelemetryTx) >= telemetryInterval) {
         lastTelemetryTx = now;
         telemetryInterval = TELEMETRY_INTERVAL_MS + random(0, 1500); // jitter to avoid synchronized transmissions
-        sendPacket(ZA_MSG_TELEMETRY);
+        sendPacket(victimCount > 0 ? ZA_MSG_SOS : ZA_MSG_TELEMETRY);
     }
 
     delay(10);
