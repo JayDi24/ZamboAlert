@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { INITIAL_ALERTS, INITIAL_RESCUERS, useNow } from "./dashboardData";
-import { apiFetch } from "./dashboardApi";
+import { apiFetch, fetchTelemetry } from "./dashboardApi";
 
 export function useDashboardData() {
   const navigate = useNavigate();
@@ -171,7 +171,7 @@ export function useDashboardData() {
 
   const fetchPods = async () => {
     try {
-      const response = await apiFetch("/api/telemetry");
+      const response = await fetchTelemetry();
       if (!response.ok) throw new Error(`Pod telemetry request failed: ${response.status}`);
       setPods(await response.json());
     } catch (error) {

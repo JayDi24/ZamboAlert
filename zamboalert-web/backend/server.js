@@ -16,6 +16,8 @@ const app = express();
 const DEFAULT_PORT = Number(process.env.PORT || 5000);
 const FALLBACK_PORTS = [DEFAULT_PORT, 5001, 5002, 5003, 5010];
 const JWT_SECRET = process.env.JWT_SECRET || "zamboalert_secret_jwt_key_12345";
+/** Root backend that receives gateway LoRa posts (must stay on :3000). Do not move this server to 3000. */
+const TELEMETRY_BACKEND_URL = (process.env.TELEMETRY_BACKEND_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 
 // Initialize Firebase Admin (optional, falls back gracefully to SQLite database)
 let firestoreDb = null;
@@ -1432,11 +1434,35 @@ app.get("/api/manpower/export", (req, res) => {
   );
 });
 
+/**
+ * Proxy live pod / SOS reports from the root gateway backend.
+ * Gateway firmware still POSTs to :3000; the dashboard can read via this :5000 route.
+ */
+app.get("/api/telemetry", async (req, res) => {
+  try {
+    const upstream = await fetch(`${TELEMETRY_BACKEND_URL}/api/telemetry`, {
+      headers: { Accept: "application/json" },
+    });
+    const body = await upstream.text();
+    res.status(upstream.status);
+    const contentType = upstream.headers.get("content-type");
+    if (contentType) res.setHeader("Content-Type", contentType);
+    return res.send(body);
+  } catch (error) {
+    console.error("Telemetry proxy failed:", error.message);
+    return res.status(503).json({
+      message: "Pod telemetry backend unreachable. Start root backend on port 3000.",
+      telemetryBackend: TELEMETRY_BACKEND_URL,
+    });
+  }
+});
+
 function startServer(portIndex = 0) {
   const port = FALLBACK_PORTS[portIndex];
 
   const server = app.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
+    console.log(`Telemetry proxy → ${TELEMETRY_BACKEND_URL}/api/telemetry`);
   });
 
   server.on("error", (error) => {
