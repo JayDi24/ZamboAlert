@@ -1134,6 +1134,54 @@ app.post('/api/logs/casualties', requireOfficial, (req, res) => {
   );
 });
 
+// Rescuer app submits a field log (casualty count or victim status update).
+// Shown to officials in Reports & Analytics.
+const RESCUER_LOG_TYPES = new Set(['casualty_count', 'victim_update']);
+app.post('/api/logs/rescuer', requireRescuer, (req, res) => {
+  const b = req.body || {};
+  if (!RESCUER_LOG_TYPES.has(b.log_type)) {
+    return res.status(400).json({ message: 'log_type must be casualty_count or victim_update.' });
+  }
+  const count = b.casualty_count === undefined || b.casualty_count === null || b.casualty_count === ''
+    ? null : parseInt(b.casualty_count, 10);
+  if (b.log_type === 'casualty_count' && (!Number.isInteger(count) || count < 0)) {
+    return res.status(400).json({ message: 'A valid casualty_count is required.' });
+  }
+  if (b.log_type === 'victim_update' && !String(b.victim_label || '').trim()) {
+    return res.status(400).json({ message: 'victim_label is required.' });
+  }
+  const email = req.mobileUser.email || '';
+  db.get(
+    'SELECT first_name, last_name FROM rescuers WHERE LOWER(TRIM(email))=LOWER(TRIM(?))',
+    [email],
+    (lookupErr, r) => {
+      const name = r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : String(b.rescuer_name || '').slice(0, 100);
+      db.run(
+        `INSERT INTO rescuer_reports (rescuer_email, rescuer_name, log_type, disaster_type, casualty_count, victim_label, victim_status, notes, message, latitude, longitude)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [email, name || null, b.log_type, b.disaster_type ? String(b.disaster_type).slice(0, 50) : null, count,
+         b.victim_label ? String(b.victim_label).slice(0, 100) : null,
+         b.victim_status ? String(b.victim_status).slice(0, 50) : null,
+         b.notes ? String(b.notes).slice(0, 500) : null,
+         b.message ? String(b.message).slice(0, 500) : null,
+         validNumber(b.latitude, -90, 90) && validNumber(b.longitude, -180, 180) ? b.latitude : null,
+         validNumber(b.latitude, -90, 90) && validNumber(b.longitude, -180, 180) ? b.longitude : null],
+        function (err) {
+          if (err) return res.status(500).json({ message: 'Failed to save rescuer log', error: err.message });
+          res.status(201).json({ message: 'Rescuer log recorded.', id: this.lastID });
+        }
+      );
+    }
+  );
+});
+
+app.get('/api/logs/rescuer', requireOfficial, (req, res) => {
+  db.all('SELECT * FROM rescuer_reports ORDER BY created_at DESC LIMIT 500', [], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Database query error', error: err.message });
+    res.json(rows);
+  });
+});
+
 app.post('/api/logs/casualties/clear', requireOfficial, (req, res) => {
   db.run('DELETE FROM casualty_logs', [], err => {
     if (err) return res.status(500).json({ message: 'Failed to clear casualty logs', error: err.message });

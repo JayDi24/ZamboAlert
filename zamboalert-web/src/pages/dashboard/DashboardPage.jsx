@@ -40,6 +40,8 @@ export default function DashboardPage() {
         alerts={dashboard.alerts}
         rescuers={dashboard.rescuers}
         casualtyLogs={dashboard.casualtyLogs}
+        rescuerReports={dashboard.rescuerReports}
+        fetchRescuerReports={dashboard.fetchRescuerReports}
         households={dashboard.households}
         incidents={dashboard.incidents}
         pods={dashboard.pods}

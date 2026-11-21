@@ -30,6 +30,8 @@ export default function DashboardContent({
   alerts,
   rescuers,
   casualtyLogs,
+  rescuerReports = [],
+  fetchRescuerReports,
   households,
   incidents,
   pods = [],
@@ -416,6 +418,7 @@ export default function DashboardContent({
         />
         <StatCard label="Total Rescued" value={incidents.reduce((sum, item) => sum + (item.total_rescued || 0), 0)} tone="sky" />
         <StatCard label="Casualties" value={incidents.reduce((sum, item) => sum + (item.casualties_count || 0), 0)} tone="purple" />
+        <StatCard label="Rescuer Logs" value={rescuerReports.length} tone="amber" />
       </div>
 
       <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -442,6 +445,61 @@ export default function DashboardContent({
                   <td className="p-3.5 font-mono">{incident.water_level_m}m</td>
                   <td className="p-3.5 font-mono text-emerald-700 font-bold">{incident.total_rescued}</td>
                   <td className="p-3.5 font-mono">{incident.avg_response_time_mins} mins</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between mt-8 mb-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">Rescuer Field Logs</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Logs sent live from rescuer phones · {rescuerReports.length} total · {rescuerReports
+              .filter((l) => l.log_type === "casualty_count")
+              .reduce((sum, l) => sum + (l.casualty_count || 0), 0)} casualties reported
+          </p>
+        </div>
+        <button onClick={fetchRescuerReports} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2">
+          <RefreshCw size={13} />
+          <span>Refresh</span>
+        </button>
+      </div>
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-mono font-bold text-[10px]">
+            <tr>
+              <th className="p-3.5 pl-4">Time</th>
+              <th className="p-3.5">Rescuer</th>
+              <th className="p-3.5">Type</th>
+              <th className="p-3.5">Disaster</th>
+              <th className="p-3.5">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rescuerReports.length === 0 ? (
+              <tr><td colSpan="5" className="p-8 text-center text-slate-400 italic">No rescuer logs received yet.</td></tr>
+            ) : (
+              rescuerReports.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3.5 pl-4 font-mono text-slate-500 whitespace-nowrap">
+                    {log.created_at ? new Date(`${log.created_at.replace(" ", "T")}Z`).toLocaleString() : "--"}
+                  </td>
+                  <td className="p-3.5 font-bold text-slate-900">{log.rescuer_name || log.rescuer_email || "Unknown"}</td>
+                  <td className="p-3.5 font-semibold text-slate-700">
+                    {log.log_type === "casualty_count" ? "Casualty count" : "Victim update"}
+                  </td>
+                  <td className="p-3.5 text-slate-700">{log.disaster_type || "--"}</td>
+                  <td className="p-3.5 text-slate-600">
+                    {log.log_type === "casualty_count"
+                      ? `${log.casualty_count} casualties`
+                      : `${log.victim_label} · ${(log.victim_status || "").toUpperCase()}${log.notes ? ` · ${log.notes}` : ""}${
+                          log.latitude != null && log.longitude != null
+                            ? ` · ${Number(log.latitude).toFixed(5)}, ${Number(log.longitude).toFixed(5)}`
+                            : ""
+                        }`}
+                  </td>
                 </tr>
               ))
             )}

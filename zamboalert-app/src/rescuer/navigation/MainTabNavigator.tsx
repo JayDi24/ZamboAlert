@@ -147,7 +147,12 @@ export function MainTabNavigator() {
     }
   };
 
-  const updateVictimSituation = (id: string, newSituation: string, newDisaster?: string) => {
+  const updateVictimSituation = (
+    id: string,
+    newSituation: string,
+    newDisaster?: string,
+    coords?: { lat: number; lng: number } | null,
+  ) => {
     setVictimsList((prev) =>
       prev.map((v) =>
         v.id === id
@@ -155,6 +160,8 @@ export function MainTabNavigator() {
               ...v,
               situation: newSituation,
               ...(newDisaster ? { disasterType: newDisaster } : {}),
+              // Re-logging a victim refreshes their pin to where the rescuer is now.
+              ...(coords ? { lat: coords.lat, lng: coords.lng, hasLocation: true, hasGpsFix: true } : {}),
             }
           : v
       )
@@ -385,7 +392,8 @@ export function MainTabNavigator() {
             onAddLog={addLog}
             victims={liveVictims}
             onUpdateVictimSituation={updateVictimSituation}
-            onAddNewVictim={(label, situation, disaster) => {
+            rescuerCoords={rescuerCoords}
+            onAddNewVictim={(label, situation, disaster, coords) => {
               const newId = `V-${(victimsList.length + 1).toString().padStart(3, "0")}`;
               const newVictim = {
                 id: newId,
@@ -397,6 +405,10 @@ export function MainTabNavigator() {
                 situation: (situation || "safe") as any,
                 lastPing: "just now",
                 disasterType: disaster || "",
+                lat: coords ? coords.lat : null,
+                lng: coords ? coords.lng : null,
+                hasLocation: Boolean(coords),
+                hasGpsFix: Boolean(coords),
               };
               setVictimsList((prev) => [...prev, newVictim]);
               return newId;

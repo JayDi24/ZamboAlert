@@ -34,6 +34,7 @@ export function useDashboardData() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [casualtyLogs, setCasualtyLogs] = useState([]);
+  const [rescuerReports, setRescuerReports] = useState([]);
   const [selectedCasualtyId, setSelectedCasualtyId] = useState(null);
   const [isFetchingCasualties, setIsFetchingCasualties] = useState(false);
 
@@ -104,6 +105,15 @@ export function useDashboardData() {
       console.error(error);
     } finally {
       setIsFetchingCasualties(false);
+    }
+  };
+
+  const fetchRescuerReports = async () => {
+    try {
+      const res = await apiFetch("/api/logs/rescuer");
+      if (res.ok) setRescuerReports(await res.json());
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -268,6 +278,7 @@ export function useDashboardData() {
 
   useEffect(() => {
     fetchCasualtyLogs();
+    fetchRescuerReports();
     fetchRescuers();
     fetchHouseholds();
     fetchIncidents();
@@ -276,6 +287,7 @@ export function useDashboardData() {
 
     const interval = setInterval(() => {
       fetchCasualtyLogs();
+      fetchRescuerReports();
       fetchRescuers();
       fetchHouseholds();
       fetchIncidents();
@@ -371,6 +383,8 @@ export function useDashboardData() {
     rescuers,
     setRescuers,
     casualtyLogs,
+    rescuerReports,
+    fetchRescuerReports,
     setCasualtyLogs,
     households,
     setHouseholds,

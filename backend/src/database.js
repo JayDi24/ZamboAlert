@@ -122,6 +122,26 @@ function createTables() {
       )
     `);
 
+    // ── Rescuer field logs (sent from the rescuer mobile app) ─────────────────
+    db.run(`
+      CREATE TABLE IF NOT EXISTS rescuer_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rescuer_email TEXT,
+        rescuer_name TEXT,
+        log_type TEXT NOT NULL,
+        disaster_type TEXT,
+        casualty_count INTEGER,
+        victim_label TEXT,
+        victim_status TEXT,
+        notes TEXT,
+        message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.run('ALTER TABLE rescuer_reports ADD COLUMN latitude REAL', () => {});
+    db.run('ALTER TABLE rescuer_reports ADD COLUMN longitude REAL', () => {});
+
     // ── Settings ──────────────────────────────────────────────────────────────
     db.run(`
       CREATE TABLE IF NOT EXISTS settings (

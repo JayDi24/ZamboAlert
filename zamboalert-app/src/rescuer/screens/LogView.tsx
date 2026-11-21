@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { postRescuerLog, RescuerLogPayload } from '../services/rescuerLogs';
 import { Mono } from '../components/SharedUI';
 import { styles } from '../theme/styles';
 import { situationColors, logTypeColors } from '../assets/displayConfig';
@@ -31,8 +34,20 @@ export interface LogViewProps {
     toastDesc?: string
   ) => void;
   victims: VictimItem[];
-  onUpdateVictimSituation: (id: string, newSituation: string, newDisaster?: string) => void;
-  onAddNewVictim: (label: string, situation: string, disaster?: string) => string;
+  onUpdateVictimSituation: (
+    id: string,
+    newSituation: string,
+    newDisaster?: string,
+    coords?: { lat: number; lng: number } | null,
+  ) => void;
+  onAddNewVictim: (
+    label: string,
+    situation: string,
+    disaster?: string,
+    coords?: { lat: number; lng: number } | null,
+  ) => string;
+  /** Rescuer's live phone GPS; used as the victim's location when logging. */
+  rescuerCoords?: { lat: number; lng: number; accuracy: number | null } | null;
 }
 
 export function LogView({
@@ -41,6 +56,7 @@ export function LogView({
   victims,
   onUpdateVictimSituation,
   onAddNewVictim,
+  rescuerCoords,
 }: LogViewProps) {
   const [activeTab, setActiveTab] = useState<'casualty' | 'victim'>('casualty');
 
@@ -49,14 +65,35 @@ export function LogView({
   const [disasterType, setDisasterType] = useState<'Earthquake' | 'Flood' | 'Landslide' | ''>('');
 
   // Victim Log state
-  const [selectedVictimId, setSelectedVictimId] = useState('');
   const [victimLabel, setVictimLabel] = useState('');
   const [victimSituation, setVictimSituation] = useState<'safe' | 'injured' | 'trapped' | 'lost or unable to move' | ''>('');
   const [victimDisaster, setVictimDisaster] = useState<'Earthquake' | 'Flood' | 'Landslide' | ''>('');
   const [logNotes, setLogNotes] = useState('');
 
+  const { session } = useAuth();
+  const toast = useToast();
+
+  // Send the log to the backend so it shows in the web dashboard's Reports & Analytics.
+  const syncToAdmin = async (payload: RescuerLogPayload) => {
+    const ok = await postRescuerLog(session?.token ?? '', payload);
+    if (!ok) {
+      toast.error('Not sent to admin', {
+        description: 'Saved on this device only. Check your connection and sign-in.',
+      });
+    }
+  };
+
   const handleCasualtyLog = () => {
     if (!disasterType || !casualtyCount) return;
+    const count = parseInt(casualtyCount, 10);
+    if (Number.isInteger(count) && count >= 0) {
+      void syncToAdmin({
+        log_type: 'casualty_count',
+        disaster_type: disasterType,
+        casualty_count: count,
+        message: `Casualties recorded for ${disasterType}: ${count}`,
+      });
+    }
     onAddLog(
       'alert',
       `Casualties recorded for ${disasterType}: ${casualtyCount}`,
@@ -80,13 +117,19 @@ export function LogView({
       (v) => v.label.toUpperCase() === label || v.id.toUpperCase() === label
     );
 
+    // The rescuer is at the victim when logging, so use the phone's GPS as the victim's location.
+    const coords =
+      rescuerCoords && Number.isFinite(rescuerCoords.lat) && Number.isFinite(rescuerCoords.lng)
+        ? { lat: rescuerCoords.lat, lng: rescuerCoords.lng }
+        : null;
+
     let finalId = '';
     let isNew = false;
     if (existingVictim) {
       finalId = existingVictim.id;
-      onUpdateVictimSituation(finalId, situation, disaster);
+      onUpdateVictimSituation(finalId, situation, disaster, coords);
     } else {
-      finalId = onAddNewVictim(label, situation, disaster);
+      finalId = onAddNewVictim(label, situation, disaster, coords);
       isNew = true;
     }
 
@@ -103,16 +146,30 @@ export function LogView({
       msg += ` · Note: ${logNotes.trim()}`;
     }
 
+    void syncToAdmin({
+      log_type: 'victim_update',
+      victim_label: label,
+      victim_status: situation,
+      disaster_type: disaster || undefined,
+      notes: logNotes.trim() || undefined,
+      latitude: coords?.lat,
+      longitude: coords?.lng,
+      message: msg,
+    });
+
     onAddLog(
       'victim',
       msg,
       true,
       isNew ? 'Victim Registered' : 'Victim Updated',
-      isNew ? `Successfully recorded ${label}. Location is not available until a live GPS report is received.` : `Successfully updated details for ${label}.`
+      isNew
+        ? coords
+          ? `Successfully recorded ${label} at your current GPS position.`
+          : `Successfully recorded ${label}. No phone GPS fix yet, so it won't appear on the map.`
+        : `Successfully updated details for ${label}.`
     );
 
     setVictimLabel('');
-    setSelectedVictimId('');
     setVictimSituation('');
     setVictimDisaster('');
     setLogNotes('');
@@ -199,65 +256,6 @@ export function LogView({
           <View>
             <Text style={styles.sectionTitle}>Record / Update Victim Info</Text>
 
-            {/* Horizontal Victim Chips */}
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151', marginBottom: 6 }}>
-              Select Existing Victim:
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ paddingVertical: 4 }}>
-              {victims.map((v) => {
-                const isSelected = selectedVictimId === v.id;
-                return (
-                  <TouchableOpacity
-                    key={v.id}
-                    onPress={() => {
-                      setSelectedVictimId(v.id);
-                      setVictimLabel(v.label);
-                      setVictimSituation(v.situation);
-                      setVictimDisaster((v.disasterType as any) || '');
-                    }}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      backgroundColor: isSelected ? '#dc2626' : '#f3f4f6',
-                      borderRadius: 20,
-                      marginRight: 8,
-                      borderWidth: 1,
-                      borderColor: isSelected ? '#dc2626' : 'rgba(0,0,0,0.06)',
-                      shadowColor: isSelected ? '#dc2626' : 'transparent',
-                      shadowOffset: { width: 0, height: 1 },
-                      shadowOpacity: isSelected ? 0.2 : 0,
-                      shadowRadius: 2,
-                      elevation: isSelected ? 1 : 0,
-                    }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: isSelected ? '#ffffff' : '#4b5563' }}>
-                      {v.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedVictimId('');
-                  setVictimLabel('');
-                  setVictimSituation('');
-                  setVictimDisaster('');
-                }}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  backgroundColor: selectedVictimId === '' && !victimLabel ? '#dc2626' : '#f3f4f6',
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: selectedVictimId === '' && !victimLabel ? '#dc2626' : 'rgba(0,0,0,0.06)',
-                }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: 'bold', color: selectedVictimId === '' && !victimLabel ? '#ffffff' : '#4b5563' }}>
-                  + NEW VICTIM
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151', marginBottom: 6 }}>
               Victim Name / ID:
             </Text>
@@ -274,11 +272,8 @@ export function LogView({
                     v.id.toLowerCase() === text.trim().toLowerCase()
                 );
                 if (found) {
-                  setSelectedVictimId(found.id);
                   setVictimSituation(found.situation);
                   setVictimDisaster((found.disasterType as any) || '');
-                } else {
-                  setSelectedVictimId('');
                 }
               }}
             />
