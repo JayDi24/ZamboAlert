@@ -13,6 +13,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -170,7 +171,7 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
   const [activeSide, setActiveSide] = useState<IdSide | null>(null);
   const [isSliding, setIsSliding] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const idNumberInputRef = useRef<TextInput>(null);
+  const idNumberInputRef = useRef<TextInputInstance>(null);
 
   const goToStep = (next: number) => {
     setIsSliding(true);

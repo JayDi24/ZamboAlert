@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, Animated, Easing, ScrollView, Pressable } from 'react-native';
+import type { HostInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -14,7 +15,7 @@ export default function WelcomeScreen({ navigation }: any) {
   const [animationStarted, setAnimationStarted] = useState(false);
   const [animationDone, setAnimationDone] = useState(false);
 
-  const logoWrapRef = useRef<View>(null);
+  const logoWrapRef = useRef<HostInstance>(null);
 
   // Animated values for the transition
   const translateX = useRef(new Animated.Value(0)).current;
