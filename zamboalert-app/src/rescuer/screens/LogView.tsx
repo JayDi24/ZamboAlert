@@ -46,13 +46,13 @@ export function LogView({
 
   // Casualty state
   const [casualtyCount, setCasualtyCount] = useState('');
-  const [disasterType, setDisasterType] = useState<'Earthquake' | 'Fire' | 'Flood' | 'Landslide' | ''>('');
+  const [disasterType, setDisasterType] = useState<'Earthquake' | 'Flood' | 'Landslide' | ''>('');
 
   // Victim Log state
   const [selectedVictimId, setSelectedVictimId] = useState('');
   const [victimLabel, setVictimLabel] = useState('');
   const [victimSituation, setVictimSituation] = useState<'safe' | 'injured' | 'trapped' | 'lost or unable to move' | ''>('');
-  const [victimDisaster, setVictimDisaster] = useState<'Earthquake' | 'Fire' | 'Flood' | 'Landslide' | ''>('');
+  const [victimDisaster, setVictimDisaster] = useState<'Earthquake' | 'Flood' | 'Landslide' | ''>('');
   const [logNotes, setLogNotes] = useState('');
 
   const handleCasualtyLog = () => {
@@ -167,7 +167,7 @@ export function LogView({
           <View>
             <Text style={styles.sectionTitle}>Record Casualties</Text>
             <View style={styles.disasterButtons}>
-              {(['Earthquake', 'Fire', 'Flood', 'Landslide'] as const).map((d) => (
+              {(['Earthquake', 'Flood', 'Landslide'] as const).map((d) => (
                 <TouchableOpacity
                   key={d}
                   style={[styles.disasterBtn, disasterType === d && styles.disasterBtnActive]}
@@ -319,12 +319,11 @@ export function LogView({
               Disaster Area:
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-              {(['Flood', 'Landslide', 'Earthquake', 'Fire'] as const).map((d) => {
+              {(['Flood', 'Landslide', 'Earthquake'] as const).map((d) => {
                 const isSelected = victimDisaster === d;
                 let activeColor = '#3b82f6';
                 if (d === 'Landslide') activeColor = '#d97706';
                 if (d === 'Earthquake') activeColor = '#4b5563';
-                if (d === 'Fire') activeColor = '#ef4444';
                 return (
                   <TouchableOpacity
                     key={d}

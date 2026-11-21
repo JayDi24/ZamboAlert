@@ -635,7 +635,6 @@ export function TacticalMap({
           Flood: "🌊",
           Landslide: "🪨",
           Earthquake: "🫨",
-          Fire: "🔥",
           "Storm Surge": "💨",
         }[c.disaster_type] || "🪨";
 

@@ -34,7 +34,7 @@ if (!JWT_SECRET) {
 const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;   // 10 min
 const CITIZEN_SOS_TTL_MS       = 10 * 60 * 1000;   // 10 min
 const POD_TTL_MS               = 90 * 1000;         // 90 s
-const DISASTER_TYPES = new Set(['earthquake', 'flood', 'fire', 'landslide']);
+const DISASTER_TYPES = new Set(['earthquake', 'flood', 'landslide']);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));

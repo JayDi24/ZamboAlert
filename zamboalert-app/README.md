@@ -14,7 +14,7 @@ React Native (Expo) mobile app for citizens using the ZamboAlert emergency commu
 | Welcome | App landing page with Sign in / Create account |
 | Login | Role-based login (Citizen / Rescuer) |
 | Sign Up | Account registration with role selection |
-| SOS | One-tap disaster emergency buttons (Earthquake, Flash Flood, Landslide, Fire) |
+| SOS | One-tap disaster emergency buttons (Earthquake, Flash Flood, Landslide) |
 | Status | BLE beacon status and nearby rescuer pod detection |
 | Log | Timestamped history of SOS events |
 | Settings | Emergency profile, permissions, logout |

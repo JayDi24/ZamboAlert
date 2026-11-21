@@ -13,7 +13,6 @@ const getDisasterEmoji = (disaster?: string) => {
   if (d === 'flood') return '🌊';
   if (d === 'landslide') return '🪨';
   if (d === 'earthquake') return '🏢';
-  if (d === 'fire') return '🔥';
   return '⚠️';
 };
 

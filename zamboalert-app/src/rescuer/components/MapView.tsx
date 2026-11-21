@@ -249,7 +249,6 @@ const LEAFLET_HTML = `
       if (d === 'flood') return '🌊';
       if (d === 'landslide') return '🪨';
       if (d === 'earthquake') return '🏢';
-      if (d === 'fire') return '🔥';
       return '⚠️';
     }
 
@@ -708,7 +707,6 @@ export function MapView({
                 v.disasterType?.toLowerCase() === "flood" ? "🌊" :
                 v.disasterType?.toLowerCase() === "landslide" ? "🪨" :
                 v.disasterType?.toLowerCase() === "earthquake" ? "🏢" :
-                v.disasterType?.toLowerCase() === "fire" ? "🔥" :
                 "⚠️";
 
               return (

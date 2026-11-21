@@ -21,7 +21,7 @@ type Coords = {
   lng: number;
 };
 
-type DisasterType = 'earthquake' | 'flood' | 'fire' | 'landslide' | null;
+type DisasterType = 'earthquake' | 'flood' | 'landslide' | null;
 
 type AppStateContextType = {
   sosActive: boolean;

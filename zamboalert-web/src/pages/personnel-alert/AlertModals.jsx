@@ -281,7 +281,6 @@ export function EscalateAgencyModal({ barangays, defaultTargets = [], onClose, o
   const agencies = [
     "Philippine Coast Guard (PCG)",
     "AFP Joint Task Force Zamboanga",
-    "Bureau of Fire Protection (BFP)",
     "Philippine Red Cross",
     "ZCDRRMO Central Command",
     "Department of Social Welfare (DSWD)",
@@ -332,7 +331,7 @@ export function EscalateAgencyModal({ barangays, defaultTargets = [], onClose, o
               <ShieldAlert size={15} className="text-purple-600" />
               External Agency Escalation
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Request reinforcements from PCG, AFP, BFP, Red Cross or ZCDRRMO</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Request reinforcements from PCG, AFP, Red Cross or ZCDRRMO</p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer">
             <X size={16} className="text-slate-500" />
