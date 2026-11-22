@@ -3,12 +3,11 @@
     "name": "ZamboAlert App",
     "slug": "zamboalert-citizen",
     "version": "1.0.0",
-    "icon": "./src/assets/zamboalert.png",
+    "icon": "./src/assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.zamboalert.citizen",
-      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -31,13 +30,22 @@
     "plugins": [
       "expo-font",
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "microphonePermission": false
         }
       ],
       "expo-location",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-build-properties"
     ]
   }
 }

@@ -162,6 +162,12 @@ void printGpsStatus() {
     } else {
         Serial.println("Searching for fix...");
     }
+    // Wiring check: bytes/sentences received from the GPS module. 0 chars =
+    // no data (check power, TX/RX wires); chars rising + sentences OK = wired
+    // correctly, only waiting on a satellite fix.
+    Serial.print("GPS chars: "); Serial.print(gps.charsProcessed());
+    Serial.print("  sentences OK: "); Serial.print(gps.passedChecksum());
+    Serial.print("  checksum fail: "); Serial.println(gps.failedChecksum());
     Serial.println("--------------------------");
 }
 
@@ -661,7 +667,8 @@ void setup() {
 
     Serial.println();
     Serial.println("Wiring:");
-    Serial.println("GPS    -> 3V3/GND, TX->GPIO16, RX->GPIO17");
+    Serial.print("GPS    -> 3V3/GND, GPS TX->GPIO"); Serial.print(GPS_RX_PIN);
+    Serial.print(", GPS RX->GPIO"); Serial.println(GPS_TX_PIN);
     Serial.print("SX1278 -> 3V3/GND, SCK"); Serial.print(LORA_SCK_PIN);
     Serial.print(" MISO"); Serial.print(LORA_MISO_PIN);
     Serial.print(" MOSI"); Serial.print(LORA_MOSI_PIN);

@@ -6,8 +6,11 @@
 
 // ---------- GPS (NEO-6M) ----------
 #define GPS_BAUD 9600
-#define GPS_RX_PIN 16   // ESP32 pin wired to GPS TX
-#define GPS_TX_PIN 17   // ESP32 pin wired to GPS RX
+// Moved off GPIO 16/17 (breadboard holes A52/A53), which were already taken.
+// UART2 can be routed to any free GPIO, so the GPS now sits on the two B-side
+// pins the buzzer and LED used to claim (those moved to 26/25 below).
+#define GPS_RX_PIN 22   // hole A44. ESP32 pin wired to GPS TX
+#define GPS_TX_PIN 21   // hole A47. ESP32 pin wired to GPS RX
 
 // ---------- LoRa radio (SX1278 / Ra-01) ----------
 // Must match the gateway's config.h exactly, or they won't hear each other.
@@ -28,9 +31,13 @@
 #define LORA_SYNC_WORD 0x12
 
 // ---------- Buzzer / LED ----------
-// Buzzer and LED on B-side pins (compact breadboard layout). Were 25 / 27.
-#define BUZZER_PIN 22
-#define LED_PIN    21
+// Not wired yet. Moved off 22/21 so the GPS UART can use those B-side holes:
+// setup() calls pinMode() on these AFTER GPSserial.begin(), so sharing a pin
+// would silently take the UART back off it. 26 and 25 are J-side pins with no
+// free hole in the current layout - they need a jumper under the ESP32 (like
+// the one feeding LoRa RST) whenever the buzzer and LED are actually added.
+#define BUZZER_PIN 26
+#define LED_PIN    25
 
 // ---------- BLE SOS detection ----------
 // The Citizen app advertises this service UUID when an SOS is active.
