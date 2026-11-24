@@ -4,6 +4,11 @@
 // Fill in / adjust values below before flashing.
 // =====================================================================
 
+// Local values (Wi-Fi, API key, SERVER_URL, and optionally GATEWAY_LAT/LNG)
+// live in secrets.h (gitignored). Included first so it can override the
+// defaults below.
+#include "secrets.h"
+
 // ---------- LoRa radio (SX1278 / Ra-01) ----------
 // Must match the pod's config.h exactly, or they won't hear each other.
 #define LORA_SCK_PIN   18
@@ -21,8 +26,14 @@
 // Set this once at install time (phone GPS or handheld unit at the
 // barangay hall). The gateway has no onboard GPS - see earlier discussion
 // on why that's correct for a stationary node.
-#define GATEWAY_LAT 6.912345
-#define GATEWAY_LNG 122.079876
+// Put the real coordinates in secrets.h. These defaults are a placeholder,
+// and the web map labels a gateway at this spot as "location not set".
+#ifndef GATEWAY_LAT
+#define GATEWAY_LAT 6.972017
+#endif
+#ifndef GATEWAY_LNG
+#define GATEWAY_LNG 122.144268
+#endif
 
 // ---------- Forwarding toggles ----------
 // 1 = enabled, 0 = disabled. Both can be on at the same time.
@@ -33,7 +44,6 @@
 
 // ---------- Wi-Fi (barangay hall local network) ----------
 // WIFI_SSID / WIFI_PASSWORD / GATEWAY_API_KEY / SERVER_URL live in secrets.h (gitignored).
-#include "secrets.h"
 
 // ---------- HTTP target (only used if FORWARD_VIA_HTTP is 1) ----------
 // SERVER_URL is set in secrets.h (per-machine LAN IP or Render URL).
