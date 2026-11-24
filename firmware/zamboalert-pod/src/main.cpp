@@ -651,9 +651,21 @@ void setup() {
     }
 
     seenFilter.init();
-    if (!setupLora()) {
-        Serial.println("LoRa init FAILED - check SX1278 wiring/power. Halting.");
-        while (true) delay(1000);
+    // Keep retrying instead of halting, and print what the radio's version
+    // register actually returns, so wiring can be fixed live on the bench.
+    while (!setupLora()) {
+        uint8_t ver = sxRead(SX_REG_VERSION);
+        Serial.print("LoRa init FAILED - RegVersion=0x"); Serial.print(ver, HEX);
+        Serial.print(" (expected 0x12)");
+        if (ver == 0x00) {
+            Serial.println("  <- all 0s: radio has no 3.3V/GND, RST held low, or MISO shorted to GND");
+        } else if (ver == 0xFF) {
+            Serial.println("  <- all 1s: MISO not connected, or radio not powered");
+        } else {
+            Serial.println("  <- wrong value: SCK/MOSI/NSS swapped or loose");
+        }
+        Serial.println("Retrying in 2 s - fix the wiring, no reboot needed.");
+        delay(2000);
     }
     Serial.println("LoRa mesh radio ready.");
     radioSelfTest();
