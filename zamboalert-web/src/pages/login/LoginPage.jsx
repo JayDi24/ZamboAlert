@@ -194,7 +194,7 @@ export default function LoginPage() {
           password,
         }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
         if (data.requiresVerification) {
@@ -225,7 +225,8 @@ export default function LoginPage() {
         setView("verify");
         showNotificationMsg(data.message || data.error || "Account requires verification.", "warning");
       } else {
-        showNotificationMsg(data.error || data.message || "Invalid email or password!", "error");
+        // 403 (awaiting admin approval) and 429 (lockout) carry a readable `message`.
+        showNotificationMsg(data.message || data.error || "Invalid email or password!", "error");
       }
     } catch (error) {
       showNotificationMsg("Cannot connect to backend server. Make sure it is running on port 3000.", "error");
@@ -256,7 +257,7 @@ export default function LoginPage() {
 
       if (response.ok) {
         setView("verify");
-        showNotificationMsg(data.message || "Verification code sent to your email. Check your inbox.", "success");
+        showNotificationMsg(data.message || "Verification code sent to your email. After you verify, an administrator must approve your account before you can sign in.", "success");
         if (data.code) {
           setVerificationCode(data.code);
         }
@@ -281,7 +282,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        showNotificationMsg("Email verified successfully! You can now log in.", "success");
+        showNotificationMsg("Email verified. An administrator must approve your account before you can sign in.", "success");
         setView("login");
         setEmail("");
         setUsername("");
@@ -777,10 +778,10 @@ export default function LoginPage() {
                               setResendTimer(60);
                               setEmailOpened(false);
                             } else {
-                              showNotificationMsg(data.message, "error");
+                              showNotificationMsg(data.message || data.error || "Could not resend the code. Sign in again to get a new code.", "error");
                             }
                           } catch (error) {
-                            showNotificationMsg("Failed to resend MFA code.", "error");
+                            showNotificationMsg("Cannot connect to backend server.", "error");
                           }
                         }}
                         className="text-[11px] text-red-600 font-semibold hover:underline bg-transparent border-0 cursor-pointer p-0"

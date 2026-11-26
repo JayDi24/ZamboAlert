@@ -347,7 +347,7 @@ export default function SettingsPage() {
   };
 
   const handleRejectRescuer = async (id) => {
-    if (!window.confirm("Are you sure you want to reject and delete this rescuer account request?")) {
+    if (!window.confirm("Delete this rescuer account? They are signed out of the app and can register again with the same email. Their field logs are kept.")) {
       return;
     }
     try {
@@ -355,7 +355,7 @@ export default function SettingsPage() {
         method: "DELETE",
       });
       if (response.ok) {
-        showToast("Rescuer registration rejected and account deleted.");
+        showToast("Rescuer account deleted. The same email can register again.");
         fetchRescuers();
         setShowReviewModal(false);
         setSelectedRescuerForReview(null);

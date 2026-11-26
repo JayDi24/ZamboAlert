@@ -16,7 +16,7 @@ import {
 import RescuerReviewModal from "../../components/RescuerReviewModal";
 import PersonnelPage from "../personnel-alert/PersonnelAlertPage";
 import SettingsPage from "../settings/SettingsPage";
-import { fmtTime } from "./dashboardData";
+import { fmtTime, formatAlertLocation, formatPing } from "./dashboardData";
 import { TacticalMap, PingDot, StatusBadge, RescuerBadge } from "./DashboardMap";
 import {
   BroadcastModal,
@@ -68,7 +68,7 @@ export default function DashboardContent({
   const currentTitle = {
     map: "Tactical Command Map",
     alerts: "SOS Emergency Stream",
-    residents: "Resident Registry & SMS Broadcast",
+    residents: "Resident Registry & Broadcast Log",
     units: "Units & Barangay Tanods",
     reports: "ZCDRRMO Incident Reports & Analytics",
     victims: "Victims Database & Casualty Logs",
@@ -88,7 +88,7 @@ export default function DashboardContent({
   };
 
   const handleRejectRescuer = async (dbId) => {
-    if (!window.confirm("Reject this rescuer registration?")) return;
+    if (!window.confirm("Delete this rescuer account? They are signed out of the app and can register again with the same email. Their field logs are kept.")) return;
     await apiFetch(`/api/rescuers/${dbId}`, { method: "DELETE" });
     setReviewRescuer(null);
     fetchRescuers();
@@ -143,7 +143,6 @@ export default function DashboardContent({
                   )}
                   <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
                     <StatusBadge status={alert.status} />
-                    <span className="text-[10px] font-mono text-slate-500">BAT {alert.battery}%</span>
                   </div>
                   {isUnassigned && (
                     <button
@@ -235,7 +234,7 @@ export default function DashboardContent({
 
           <button onClick={() => setActiveTab("residents")} className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-2.5 cursor-pointer">
             <Home size={15} />
-            <span>Resident SMS Broadcast</span>
+            <span>Resident Broadcast (SMS not connected)</span>
           </button>
 
           <button onClick={() => setActiveTab("reports")} className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-2.5 cursor-pointer">
@@ -277,13 +276,12 @@ export default function DashboardContent({
                 <StatusBadge status={alert.status} />
               </div>
               <div className="text-base font-bold text-slate-900">{alert.name}</div>
-              <div className="text-xs text-slate-500">{alert.zone} · {alert.lat}, {alert.lng}</div>
+              <div className="text-xs text-slate-500">{alert.zone} · {formatAlertLocation(alert)}</div>
               {alert.message && (
                 <div className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">“{alert.message}”</div>
               )}
             </div>
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-mono text-slate-400">Battery: {alert.battery}%</span>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
               {alert.status === "unassigned" ? (
                 <button onClick={() => setDispatchTarget(alert)} className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer">Dispatch</button>
               ) : (
@@ -300,8 +298,8 @@ export default function DashboardContent({
     <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-y-auto custom-scrollbar">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Resident Registry & SMS Broadcast</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Barangay Tumaga household directory and targeted SMS alerts</p>
+          <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Resident Registry & Broadcast Log</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Barangay Tumaga household directory and broadcast log (SMS not connected yet)</p>
         </div>
         <button onClick={fetchHouseholds} disabled={isFetchingHouseholds} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2">
           <RefreshCw size={13} className={isFetchingHouseholds ? "animate-spin" : ""} />
@@ -311,7 +309,7 @@ export default function DashboardContent({
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
         <StatCard label="Total Households" value={households.length} tone="slate" />
-        <StatCard label="SMS Subscribed" value={households.filter((household) => household.status === "Active").length} tone="emerald" />
+        <StatCard label="Active Contacts" value={households.filter((household) => household.status === "Active").length} tone="emerald" />
         <StatCard label="Covered Residents" value={households.reduce((sum, household) => sum + (household.occupants_count || 1), 0)} tone="sky" />
         <StatCard label="Seniors / PWD" value={households.reduce((sum, household) => sum + (household.vulnerable_count || 0), 0)} tone="amber" />
       </div>
@@ -374,8 +372,7 @@ export default function DashboardContent({
               <div className="text-xs text-slate-600 font-mono mt-1">📍 {rescuer.lat && rescuer.lng ? `${rescuer.lat}, ${rescuer.lng}` : "No location yet"}</div>
             </div>
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-mono text-slate-500">
-              <span>Ping: {rescuer.lastPing}</span>
-              <span>BAT: {rescuer.battery}%</span>
+              <span>Ping: {formatPing(rescuer.locationUpdatedAt, now)}</span>
             </div>
           </div>
         ))}

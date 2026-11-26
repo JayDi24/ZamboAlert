@@ -10,6 +10,7 @@ import {
   X,
   Navigation,
 } from "lucide-react";
+import { formatAlertLocation } from "./dashboardData";
 
 export function BroadcastModal({ onClose }) {
   const [msg, setMsg] = useState("");
@@ -34,7 +35,7 @@ export function BroadcastModal({ onClose }) {
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide font-mono">
                 Emergency LoRa Broadcast
               </h3>
-              <p className="text-[11px] text-slate-500">Transmits to all offline mesh nodes & rescuer radios</p>
+              <p className="text-[11px] text-slate-500">LoRa downlink is not connected yet — nothing is transmitted</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer">
@@ -48,8 +49,8 @@ export function BroadcastModal({ onClose }) {
               <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
                 <CheckCircle size={28} />
               </div>
-              <span className="text-sm font-bold font-mono text-emerald-700">BROADCAST TRANSMITTED</span>
-              <span className="text-xs text-slate-500">Successfully relayed across 3 mesh repeaters</span>
+              <span className="text-sm font-bold font-mono text-emerald-700">BROADCAST NOT SENT</span>
+              <span className="text-xs text-slate-500">LoRa broadcast is not connected yet. No message was transmitted.</span>
             </div>
           ) : (
             <>
@@ -127,7 +128,7 @@ export function DispatchModal({ alert, rescuers, onDispatch, onClose }) {
               <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 font-mono font-bold text-[10px]">{alert.id}</span>
               <span className="text-sm">{alert.name}</span>
             </div>
-            <div className="text-slate-600">{alert.zone} · {alert.lat}, {alert.lng}</div>
+            <div className="text-slate-600">{alert.zone} · {formatAlertLocation(alert)}</div>
             {alert.message && (
               <div className="text-red-800 italic border-t border-red-100/60 pt-2 mt-2">“{alert.message}”</div>
             )}
@@ -154,7 +155,6 @@ export function DispatchModal({ alert, rescuers, onDispatch, onClose }) {
                     <div className="text-[11px] text-slate-500 font-mono mt-0.5">{r.unit} · {r.id}</div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">BAT {r.battery}%</span>
                     {chosen === r.id ? (
                       <CheckCircle size={16} className="text-red-600" />
                     ) : (
@@ -237,7 +237,7 @@ export function MessageRescuerModal({ rescuers, casualties, alerts, onClose, onD
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide font-mono">
                 Message Rescuer
               </h3>
-              <p className="text-[11px] text-slate-500">Text a rescuer directly to dispatch them to a victim</p>
+              <p className="text-[11px] text-slate-500">Record a rescuer dispatch to a victim or SOS alert</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer">
@@ -250,8 +250,8 @@ export function MessageRescuerModal({ rescuers, casualties, alerts, onClose, onD
             <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
               <Check size={24} />
             </div>
-            <h4 className="text-sm font-bold text-slate-900 font-mono uppercase tracking-wide">Message Sent!</h4>
-            <p className="text-xs text-slate-500">Dispatch SMS delivered to {selectedRescuer?.name}'s phone.</p>
+            <h4 className="text-sm font-bold text-slate-900 font-mono uppercase tracking-wide">Dispatch Recorded</h4>
+            <p className="text-xs text-slate-500">Dispatch recorded for {selectedRescuer?.name}. They are not notified automatically — contact them directly.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
@@ -326,7 +326,7 @@ export function MessageRescuerModal({ rescuers, casualties, alerts, onClose, onD
 
             {smsPreview && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">SMS Preview</label>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Message preview (not sent automatically)</label>
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-900 leading-relaxed font-mono">
                   {smsPreview}
                 </div>

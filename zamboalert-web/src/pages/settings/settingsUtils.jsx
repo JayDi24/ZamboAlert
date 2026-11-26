@@ -8,7 +8,7 @@ export const SETTINGS_TABS = [
 export const NOTIFICATION_ITEMS = [
   { id: "emailAlerts", label: "Incident Email Alerts", desc: "Receive email reports for every unresolved critical incident." },
   { id: "browserSound", label: "Browser Alert Alarm", desc: "Play critical sirens/beeps on tactical dashboard during SOS triggers." },
-  { id: "highPrioritySMS", label: "Urgent SMS Announcements", desc: "Mirror SOS notifications to community council mobile phones." },
+  { id: "highPrioritySMS", label: "Urgent SMS Announcements (not available yet)", desc: "SMS sending is not connected yet. This setting has no effect." },
   { id: "autoCallZcdrrmo", label: "Auto-Call Main ZCDRRMO Office", desc: "Automate voice hotline calls to ZCDRRMO Command Center on Level 3 critical SOS triggers." },
   { id: "weeklyReport", label: "Weekly Dispatch Report", desc: "Email automated weekly stats logs to Barangay Captain." },
 ];

@@ -36,7 +36,7 @@ export function TriggerAlertModal({ barangay, onClose, onTriggered }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Alert trigger failed");
-      setSuccess(true);
+      setSuccess(data || true);
       onTriggered?.();
     } catch (e) {
       setError(e.message);
@@ -54,7 +54,7 @@ export function TriggerAlertModal({ barangay, onClose, onTriggered }) {
               <Radio size={15} className="text-red-600" />
               Emergency Red Alert Broadcast
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Brgy. {barangay} — LoRa + SMS mobilization signal</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Brgy. {barangay} — Mobilization record (no broadcast sent)</p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer">
             <X size={16} className="text-slate-500" />
@@ -67,8 +67,8 @@ export function TriggerAlertModal({ barangay, onClose, onTriggered }) {
               <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto">
                 <Radio size={28} className="text-red-600 animate-pulse" />
               </div>
-              <div className="font-bold text-slate-900">Alert Broadcasted!</div>
-              <p className="text-xs text-slate-500">Emergency mobilization signal transmitted to Barangay {barangay}.</p>
+              <div className="font-bold text-slate-900">Alert Recorded</div>
+              <p className="text-xs text-slate-500">{success?.message || `Red alert recorded for Barangay ${barangay}. No broadcast was sent.`}</p>
               <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer">
                 Close
               </button>
@@ -100,7 +100,7 @@ export function TriggerAlertModal({ barangay, onClose, onTriggered }) {
                   className="flex-1 py-3 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   {loading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                  {loading ? "Broadcasting..." : "Trigger Alert"}
+                  {loading ? "Recording..." : "Trigger Alert"}
                 </button>
                 <button onClick={onClose} className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer">Cancel</button>
               </div>
@@ -194,7 +194,7 @@ export function MutualAidModal({ barangays, defaultTo = "", onClose, onTransferr
             <div className="w-14 h-14 bg-sky-100 rounded-full flex items-center justify-center mx-auto">
               <ArrowRightLeft size={26} className="text-sky-600" />
             </div>
-            <div className="font-bold text-slate-900">Transfer Dispatched!</div>
+            <div className="font-bold text-slate-900">Transfer Recorded</div>
             <p className="text-xs text-slate-500">{success.message}</p>
             <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer">Close</button>
           </div>
@@ -254,7 +254,7 @@ export function MutualAidModal({ barangays, defaultTo = "", onClose, onTransferr
               <button onClick={handleSubmit} disabled={loading}
                 className="flex-1 py-3 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2">
                 {loading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                {loading ? "Dispatching..." : "Deploy Transfer"}
+                {loading ? "Recording..." : "Deploy Transfer"}
               </button>
               <button onClick={onClose} className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer">Cancel</button>
             </div>
@@ -343,7 +343,7 @@ export function EscalateAgencyModal({ barangays, defaultTargets = [], onClose, o
             <div className="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center mx-auto">
               <ShieldCheck size={26} className="text-purple-600" />
             </div>
-            <div className="font-bold text-slate-900">Escalation Transmitted!</div>
+            <div className="font-bold text-slate-900">Escalation Recorded</div>
             <p className="text-xs text-slate-500">{success.message}</p>
             <div className="inline-block bg-purple-50 border border-purple-200 text-purple-700 px-4 py-2 rounded-lg text-sm font-mono font-bold">
               Ref: {success.reference_no}
@@ -425,7 +425,7 @@ export function EscalateAgencyModal({ barangays, defaultTargets = [], onClose, o
               <button onClick={handleSubmit} disabled={loading}
                 className="flex-1 py-3 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2">
                 {loading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                {loading ? "Escalating..." : "Send Escalation Request"}
+                {loading ? "Recording..." : "Record Escalation Request"}
               </button>
               <button onClick={onClose} className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer">Cancel</button>
             </div>

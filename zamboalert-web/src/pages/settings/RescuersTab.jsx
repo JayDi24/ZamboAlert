@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  Battery,
   CheckCircle,
   Eye,
   RefreshCw,
@@ -373,7 +372,6 @@ export default function RescuersTab({
                     <th className="p-3">Rescuer Unit</th>
                     <th className="p-3">Event Type</th>
                     <th className="p-3">Status</th>
-                    <th className="p-3">Battery</th>
                     <th className="p-3">Signal</th>
                     <th className="p-3">Log Details</th>
                   </tr>
@@ -381,7 +379,7 @@ export default function RescuersTab({
                 <tbody className="divide-y divide-slate-100 font-mono">
                   {filteredRescuers.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="p-8 text-center text-slate-400 italic">
+                      <td colSpan="7" className="p-8 text-center text-slate-400 italic">
                         No rescuer logs match the selected filter.
                       </td>
                     </tr>
@@ -407,12 +405,6 @@ export default function RescuersTab({
                             }`} />
                             {log.status}
                           </span>
-                        </td>
-                        <td className="p-3 font-semibold">
-                          <div className="flex items-center gap-1 text-slate-700">
-                            <Battery size={12} className={log.battery <= 20 ? "text-red-600" : "text-emerald-600"} />
-                            <span className={log.battery <= 20 ? "text-red-700 font-bold" : ""}>{log.battery}%</span>
-                          </div>
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-1 text-slate-700">

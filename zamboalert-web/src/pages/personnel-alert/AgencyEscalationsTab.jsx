@@ -12,7 +12,7 @@ export default function AgencyEscalationsTab({
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900">External Agency Escalation Log</h3>
-          <p className="text-[11px] text-slate-500 mt-0.5">Reinforcement requests transmitted to PCG, AFP, Red Cross, and NDRRMC</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">Reinforcement requests recorded for PCG, AFP, Red Cross, and NDRRMC (not transmitted automatically)</p>
         </div>
         <div className="flex gap-2">
           <button

@@ -144,8 +144,6 @@ export function useDashboardData() {
           lat: formatLat(rescuer.latitude),
           lng: formatLng(rescuer.longitude),
           locationUpdatedAt: rescuer.location_updated_at || null,
-          battery: rescuer.is_verified === 1 ? 95 : 0,
-          lastPing: rescuer.is_verified === 1 ? "Just now" : "--",
           assignedTargetType: rescuer.assigned_target_type || null,
           assignedTargetId: rescuer.assigned_target_id || null,
           assignedTargetName: rescuer.assigned_target_name || null,
@@ -254,20 +252,21 @@ export function useDashboardData() {
           const prior = localOverrides.get(id);
           const received = report.receivedAt ? new Date(report.receivedAt) : new Date();
           const disaster = (report.disasterType || "emergency").toUpperCase();
+          const toCoord = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+          const hasLocation = toCoord(report.lat) !== null && toCoord(report.lng) !== null;
           return {
             id,
             clientId: report.clientId,
             name: report.name || "Citizen SOS",
-            lat: report.lat,
-            lng: report.lng,
-            latitude: report.lat,
-            longitude: report.lng,
+            lat: hasLocation ? toCoord(report.lat) : null,
+            lng: hasLocation ? toCoord(report.lng) : null,
+            latitude: hasLocation ? toCoord(report.lat) : null,
+            longitude: hasLocation ? toCoord(report.lng) : null,
             status: prior?.status || "unassigned",
             assignedTo: prior?.assignedTo,
             time: received.toLocaleTimeString("en-PH", { hour12: false }),
             zone: disaster,
-            message: `${disaster} distress — phone GPS`,
-            battery: "--",
+            message: hasLocation ? `${disaster} distress — phone GPS` : `${disaster} distress — location unavailable`,
           };
         });
       });
