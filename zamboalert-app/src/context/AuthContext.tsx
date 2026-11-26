@@ -143,6 +143,11 @@ export type SessionDetails = {
 // LoginScreen can just render off of it.
 export type AuthStep = 'login' | 'verify_email' | 'mfa';
 
+// Successful signup; null from signUp() means it failed (see `error`).
+export type SignUpResult = {
+  docUploadToken?: string;
+};
+
 type AuthContextType = {
   user: PublicUser | null;
   session: SessionDetails | null;
@@ -156,7 +161,7 @@ type AuthContextType = {
   devCode: string | null;
 
   login: (email: string, password: string, role: string) => Promise<void>;
-  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string, idFrontUri?: string, idBackUri?: string, middleName?: string) => Promise<boolean>;
+  signUp: (firstName: string, lastName: string, email: string, password: string, role: string, contactNumber: string, idType?: string, idNumber?: string, idFrontUri?: string, idBackUri?: string, middleName?: string) => Promise<SignUpResult | null>;
   logout: () => void;
   updateUser: (updates: Partial<Pick<UserRecord, 'mfaEnabled' | 'mfaSecret'>>) => void;
 
@@ -270,8 +275,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || 'Login failed.');
+        // Non-JSON bodies (proxy errors, etc.) must not fall through to the
+        // offline fallback in the catch block.
+        const data = await response.json().catch(() => ({} as Record<string, unknown>));
+        const serverError = typeof data.error === 'string' ? data.error : '';
+        const serverMessage = typeof data.message === 'string' ? data.message : '';
+        if (response.status === 429) {
+          // Lockout after too many attempts — prefer the human-readable message.
+          setError(serverMessage || serverError || 'Too many login attempts. Please try again later.');
+        } else {
+          setError(serverError || serverMessage || 'Login failed.');
+        }
         return;
       }
 
@@ -412,14 +426,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     idFrontUri?: string,
     idBackUri?: string,
     middleName?: string
-  ): Promise<boolean> {
+  ): Promise<SignUpResult | null> {
     setLoading(true);
     setError('');
     try {
       const policy = checkPasswordPolicy(password);
       if (policy.score < MIN_PASSWORD_SCORE) {
         setError('Password is too weak. Meet at least 4 of the 5 requirements.');
-        return false;
+        return null;
       }
 
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/signup`, {
@@ -443,17 +457,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         const data = await response.json();
         setError(data.error || 'Registration failed.');
-        return false;
+        return null;
       }
 
       const data = await response.json();
       setDevCode(null);
       setPendingEmail(data.email);
       setAuthStep('verify_email');
-      return true;
+      // Rescuer signups get a short-lived token that authorizes the ID
+      // document upload on RescuerVerificationScreen.
+      return {
+        docUploadToken: typeof data.docUploadToken === 'string' ? data.docUploadToken : undefined,
+      };
     } catch {
       setError('Connection error. Is the backend running?');
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }

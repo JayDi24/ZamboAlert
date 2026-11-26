@@ -254,6 +254,14 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
     }
   };
 
+  const showVerificationExpired = (serverMessage?: string) => {
+    Alert.alert(
+      'Verification expired',
+      serverMessage ||
+        'Your verification session has expired. Contact the barangay office to finish rescuer verification.',
+    );
+  };
+
   const handleSubmit = async () => {
     if (!idNumber.trim()) {
       Alert.alert('ID Number Required', 'Please enter your ID number to continue.');
@@ -274,6 +282,13 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
       return;
     }
 
+    // Short-lived token from signup that authorizes the ID upload.
+    const docUploadToken: string | undefined = route.params?.registrationData?.docUploadToken;
+    if (!docUploadToken) {
+      showVerificationExpired();
+      return;
+    }
+
     setSubmitting(true);
     try {
       // ── Step 1: Save to primary mobile app backend (port 3000) ───────────
@@ -286,10 +301,16 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
           idNumber: idNumber.trim(),
           idFrontUri,
           idBackUri,
+          docUploadToken,
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        showVerificationExpired(typeof data.message === 'string' ? data.message : undefined);
+        return;
+      }
 
       if (!response.ok) {
         Alert.alert('Submission Failed', data.error || 'Something went wrong. Please try again.');
@@ -310,8 +331,14 @@ export default function RescuerVerificationScreen({ navigation, route }: any) {
             phone_number: reg?.contactNumber || reg?.phone || '',
             id_type: idType,
             id_number: idNumber.trim(),
+            docUploadToken,
           }),
         });
+        if (regResponse.status === 401) {
+          const regData = await regResponse.json().catch(() => ({}));
+          showVerificationExpired(typeof regData.message === 'string' ? regData.message : undefined);
+          return;
+        }
         // 400 "already registered" on a retry is expected; anything else is worth logging.
         if (!regResponse.ok && regResponse.status !== 400) {
           console.warn(`Rescuer registration sync failed (HTTP ${regResponse.status}).`);

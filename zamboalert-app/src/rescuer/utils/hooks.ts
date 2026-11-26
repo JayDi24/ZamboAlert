@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import * as Location from 'expo-location';
-import { postRescuerLocation, RescuerCoords } from '../services/rescuerLocation';
+import { checkRescuerSession, postRescuerLocation, RescuerCoords } from '../services/rescuerLocation';
 
 export function useAnimatedValue(target: number, speed = 0.08) {
   const [val, setVal] = useState(target);
@@ -100,9 +100,15 @@ const LOCATION_RESEND_UNCHANGED_MS = 30000;
  * Skips a tick when coords are unchanged since the last successful send and that send was < 30 s ago.
  * Never overlaps requests. A token that gets a 401 is not retried (logged once).
  */
-export function useRescuerLocationSync(token: string | null | undefined, coords: RescuerCoords | null) {
+export function useRescuerLocationSync(
+  token: string | null | undefined,
+  coords: RescuerCoords | null,
+  onUnauthorized?: () => void,
+) {
   const coordsRef = useRef(coords);
   coordsRef.current = coords;
+  const onUnauthorizedRef = useRef(onUnauthorized);
+  onUnauthorizedRef.current = onUnauthorized;
 
   useEffect(() => {
     // Offline sessions carry a locally generated token the backend can never accept.
@@ -139,6 +145,7 @@ export function useRescuerLocationSync(token: string | null | undefined, coords:
         } else if (result === 'unauthorized') {
           tokenRejected = true;
           console.warn('Rescuer location upload rejected (401); session token not accepted. Not retrying for this session.');
+          onUnauthorizedRef.current?.();
         } else if (result === 'no_profile') {
           // Throttle retries to the unchanged-resend window instead of every tick.
           lastSent = { ...current, at: Date.now() };
@@ -158,6 +165,55 @@ export function useRescuerLocationSync(token: string | null | undefined, coords:
     const timer = setInterval(() => {
       void tick();
     }, LOCATION_SEND_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [token]);
+}
+
+const SESSION_CHECK_INTERVAL_MS = 30000;
+
+/**
+ * Checks every 30 s (and once on start) that the rescuer account still exists
+ * and is approved. Calls `onRevoked` once with the server's message when the
+ * backend answers 401 (account deleted, un-approved, or token expired).
+ * Offline or server errors are ignored, so a weak signal never signs anyone out.
+ */
+export function useRescuerSessionGuard(
+  token: string | null | undefined,
+  onRevoked: (message: string) => void,
+) {
+  const onRevokedRef = useRef(onRevoked);
+  onRevokedRef.current = onRevoked;
+
+  useEffect(() => {
+    // Offline sessions carry a locally generated token the backend can never accept.
+    if (!token || token.startsWith('offline-')) return;
+
+    let active = true;
+    let inFlight = false;
+    let revoked = false;
+
+    const tick = async () => {
+      if (!active || inFlight || revoked) return;
+      inFlight = true;
+      try {
+        const result = await checkRescuerSession(token);
+        if (active && result.status === 'revoked') {
+          revoked = true;
+          onRevokedRef.current(result.message);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick();
+    const timer = setInterval(() => {
+      void tick();
+    }, SESSION_CHECK_INTERVAL_MS);
 
     return () => {
       active = false;

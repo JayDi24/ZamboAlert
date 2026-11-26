@@ -95,6 +95,7 @@ export default function SignUpScreen({ navigation }: { navigation: AuthNavigatio
             email: cleanEmail,
             role,
             contactNumber: cleanContact,
+            docUploadToken: started.docUploadToken,
           },
         });
       } else {

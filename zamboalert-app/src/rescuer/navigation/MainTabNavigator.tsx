@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
+  Alert,
   Text,
   View,
   TouchableOpacity,
@@ -29,7 +30,7 @@ import { styles } from "../theme/styles";
 import { RadarView } from "../components/RadarView";
 import { MapView } from "../components/MapView";
 import { fetchPodTelemetry, fetchCitizenSos, PodTelemetry, CitizenSosReport } from "../services/telemetry";
-import { useRescuerGps, useRescuerLocationSync } from "../utils/hooks";
+import { useRescuerGps, useRescuerLocationSync, useRescuerSessionGuard } from "../utils/hooks";
 
 import {
   situationColors,
@@ -41,7 +42,7 @@ import { LogView } from "../screens/LogView";
 
 // ── Main Tab Navigator Component ──────────────────────────────────────────
 export function MainTabNavigator() {
-  const { user: currentUser, session: currentSession, logout, updateUser } = useAuth();
+  const { user: currentUser, session: currentSession, logout } = useAuth();
   const toast = useToast();
   const insets = useSafeAreaInsets();
 
@@ -68,7 +69,21 @@ export function MainTabNavigator() {
       description: "Your position will not be shown on the map or shared.",
     });
   });
-  useRescuerLocationSync(isRescuerSession ? currentSession?.token : null, rescuerCoords);
+  // Sign out automatically when the backend says this account was deleted or
+  // is no longer approved (session check every 30 s, or a rejected location upload).
+  const signedOutRef = useRef(false);
+  const handleSessionRevoked = (message?: string) => {
+    if (signedOutRef.current) return;
+    signedOutRef.current = true;
+    logout();
+    Alert.alert(
+      "Signed out",
+      message || "This rescuer account was removed or is no longer approved. Please sign in again.",
+    );
+  };
+  const sessionToken = isRescuerSession ? currentSession?.token : null;
+  useRescuerSessionGuard(sessionToken, handleSessionRevoked);
+  useRescuerLocationSync(sessionToken, rescuerCoords, () => handleSessionRevoked());
 
   useEffect(() => {
     let active = true;
@@ -136,8 +151,8 @@ export function MainTabNavigator() {
     const rescuerName = currentUser ? currentUser.name : "Rescuer";
     if (status) {
       addLog("alert", `RESCUER EMERGENCY: ${rescuerName} is ${status} on Floor ${selectedFloor}`, false);
-      toast.error("SOS Alert Sent", {
-        description: `Emergency alert: Rescuer is ${status} on Floor ${selectedFloor}.`,
+      toast.error("Status set", {
+        description: "Shown on this phone only — not sent to command.",
       });
     } else {
       addLog("system", `RESCUER SOS RESOLVED: ${rescuerName} is safe`, false);
@@ -326,7 +341,10 @@ export function MainTabNavigator() {
           <View style={styles.row}>
             <AlertTriangle size={14} color="#ffffff" style={{ marginRight: 6 }} />
             <Mono style={styles.criticalAlertText}>
-              {criticalVictim.label} TRAPPED — {criticalVictim.distance.toFixed(1)} m at {criticalVictim.bearing}°
+              {criticalVictim.label} TRAPPED
+              {Number.isFinite(criticalVictim.distance) && Number.isFinite(criticalVictim.bearing)
+                ? ` — ${(criticalVictim.distance as number).toFixed(1)} m at ${criticalVictim.bearing}°`
+                : ""}
             </Mono>
           </View>
           <ChevronRight size={14} color="rgba(255,255,255,0.6)" />
@@ -512,8 +530,6 @@ export function MainTabNavigator() {
                 currentUser={currentUser as any}
                 session={currentSession}
                 onLogout={logout}
-                onUpdateUser={updateUser}
-                toast={toast}
               />
             </ScrollView>
           </View>

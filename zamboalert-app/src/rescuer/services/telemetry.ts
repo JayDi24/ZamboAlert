@@ -25,8 +25,9 @@ export interface CitizenSosReport {
   id: string;
   clientId: string;
   name: string;
-  lat: number;
-  lng: number;
+  // null when the phone had no GPS fix ("location unavailable")
+  lat: number | null;
+  lng: number | null;
   disasterType: string;
   status: string;
   receivedAt: string;

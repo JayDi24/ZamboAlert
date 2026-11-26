@@ -876,8 +876,12 @@ export function MapView({
               )}
             </View>
             <View style={styles.alignRight}>
-              <Mono style={styles.navDistanceText}>{selectedV.distance.toFixed(1)}m</Mono>
-              <Mono style={styles.navBearingText}>{selectedV.bearing}° Bearing</Mono>
+              <Mono style={styles.navDistanceText}>
+                {Number.isFinite(selectedV.distance) ? `${(selectedV.distance as number).toFixed(1)}m` : "—"}
+              </Mono>
+              {Number.isFinite(selectedV.bearing) && (
+                <Mono style={styles.navBearingText}>{selectedV.bearing}° Bearing</Mono>
+              )}
             </View>
           </View>
 
@@ -938,7 +942,7 @@ export function MapView({
               </TouchableOpacity>
             </View>
             <Text style={styles.modalSubtitle}>
-              Select your emergency status. This will alert all other active respondents.
+              Marks your status on this phone only. It is not sent to command or other rescuers yet.
             </Text>
 
             {/* Trapped Option */}

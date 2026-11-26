@@ -192,7 +192,7 @@ export default function SOSScreen({ navigation }: any) {
               <Text style={styles.actionTitle}>{pendingDisaster?.label || 'Emergency'} emergency</Text>
               <Pressable onPress={handleSendPhoto} style={styles.primaryAction}>
                 <Ionicons name="camera-outline" size={18} color={colors.textOnPrimary} />
-                <Text style={styles.primaryActionText}>Send a photo</Text>
+                <Text style={styles.primaryActionText}>Add photo (stays on this phone)</Text>
               </Pressable>
               <Pressable onPress={handleSendWithoutPhoto} style={styles.secondaryAction}>
                 <Ionicons name="send-outline" size={18} color={colors.textPrimary} />
@@ -210,7 +210,7 @@ export default function SOSScreen({ navigation }: any) {
           <Card style={styles.proofCard}>
             <Text style={[typography.eyebrow, { marginBottom: 8 }]}>Photo proof</Text>
             <Image source={{ uri: photoProofUri }} style={styles.proofImage} />
-            <Text style={[typography.meta, { marginTop: 8 }]}>Emergency photo attached to current distress signal.</Text>
+            <Text style={[typography.meta, { marginTop: 8 }]}>This photo stays on this phone. It is not sent with your SOS yet.</Text>
           </Card>
         )}
 

@@ -56,7 +56,11 @@ export function PodsView({ nodes, citizenSosList = [], onSelectSos }: PodsViewPr
             </Text>
           </View>
 
-          {citizenSosList.map((sos) => (
+          {citizenSosList.map((sos) => {
+            const hasLocation =
+              typeof sos.lat === 'number' && Number.isFinite(sos.lat) &&
+              typeof sos.lng === 'number' && Number.isFinite(sos.lng);
+            return (
             <View
               key={sos.id || sos.clientId}
               style={[styles.podCard, { borderColor: '#fca5a5', backgroundColor: '#fff5f5' }]}
@@ -69,7 +73,10 @@ export function PodsView({ nodes, citizenSosList = [], onSelectSos }: PodsViewPr
                       CITIZEN SOS: {sos.name || 'Citizen'}
                     </Mono>
                     <Mono style={styles.podCardSubText}>
-                      {new Date(sos.receivedAt).toLocaleTimeString()} · GPS {sos.lat?.toFixed(5)}, {sos.lng?.toFixed(5)}
+                      {new Date(sos.receivedAt).toLocaleTimeString()} ·{' '}
+                      {hasLocation
+                        ? `GPS ${(sos.lat as number).toFixed(5)}, ${(sos.lng as number).toFixed(5)}`
+                        : 'Location unavailable'}
                     </Mono>
                   </View>
                 </View>
@@ -80,7 +87,7 @@ export function PodsView({ nodes, citizenSosList = [], onSelectSos }: PodsViewPr
                 </View>
               </View>
 
-              {onSelectSos && (
+              {onSelectSos && hasLocation && (
                 <TouchableOpacity
                   onPress={() => onSelectSos(sos.id || `SOS-${sos.clientId}`)}
                   style={{
@@ -101,7 +108,8 @@ export function PodsView({ nodes, citizenSosList = [], onSelectSos }: PodsViewPr
                 </TouchableOpacity>
               )}
             </View>
-          ))}
+            );
+          })}
         </View>
       )}
 

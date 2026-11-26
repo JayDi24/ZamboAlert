@@ -64,22 +64,19 @@ export default function WaitingForApprovalModal({
   }, [visible, pulseAnim]);
 
   const handleCheckStatus = async () => {
+    // Only reachable when a real status check is provided (button is hidden otherwise).
+    if (!onCheckStatus) return;
     setChecking(true);
     setStatusMessage(null);
     try {
-      if (onCheckStatus) {
-        const isApproved = await onCheckStatus();
-        if (isApproved) {
-          Alert.alert(
-            'Account Approved! 🎉',
-            'Your rescuer credentials have been verified by ZamboAlert Admin. You can now log in.',
-            [{ text: 'Proceed to Login', onPress: onClose }]
-          );
-          return;
-        }
-      } else {
-        // Simulated latency
-        await new Promise((res) => setTimeout(res, 1200));
+      const isApproved = await onCheckStatus();
+      if (isApproved) {
+        Alert.alert(
+          'Account Approved! 🎉',
+          'Your rescuer credentials have been verified by ZamboAlert Admin. You can now log in.',
+          [{ text: 'Proceed to Login', onPress: onClose }]
+        );
+        return;
       }
       setStatusMessage('Still pending review. The ZamboAlert Admin Web team is verifying your submitted ID.');
     } catch {
@@ -250,23 +247,33 @@ export default function WaitingForApprovalModal({
 
         {/* Footer Controls */}
         <View style={styles.footer}>
-          <Pressable
-            onPress={handleCheckStatus}
-            disabled={checking}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            {checking ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="refresh-outline" size={18} color="#FFF" />
-                <Text style={styles.primaryBtnText}>Check Approval Status</Text>
-              </>
-            )}
-          </Pressable>
+          {onCheckStatus ? (
+            <Pressable
+              onPress={handleCheckStatus}
+              disabled={checking}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              {checking ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="refresh-outline" size={18} color="#FFF" />
+                  <Text style={styles.primaryBtnText}>Check Approval Status</Text>
+                </>
+              )}
+            </Pressable>
+          ) : (
+            // No real status check wired up — don't simulate one.
+            <View style={[styles.statusMessageCard, { marginBottom: 0 }]}>
+              <Ionicons name="time-outline" size={16} color="#D97706" />
+              <Text style={styles.statusMessageText}>
+                You can sign in as soon as an administrator approves your account.
+              </Text>
+            </View>
+          )}
 
           <Pressable
             onPress={onClose}

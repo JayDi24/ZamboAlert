@@ -8,6 +8,8 @@ import { API_BASE_URL } from '../config';
 import { useAuth } from './AuthContext';
 
 const SOS_SERVICE_UUID = 'fef10001-7b82-4b93-b2c2-0f81ea3300a1';
+// Server keeps an SOS for 10 min after its last POST; re-send well inside that.
+const SOS_HEARTBEAT_MS = 60_000;
 
 type LogEntry = {
   id: string;
@@ -53,6 +55,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     { id: '1', type: 'info', message: 'App initialized', time: nowLabel() },
   ]);
 
+  // Refs read by the SOS heartbeat timer (avoids stale closures).
+  const coordsRef            = useRef<Coords | null>(null);
+  const sosActiveRef         = useRef(false);
+  const sosGenerationRef     = useRef(0);
+  const heartbeatTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatInFlightRef = useRef(false);
+  const heartbeatFailedRef   = useRef(false);
+
+  useEffect(() => {
+    coordsRef.current = coords;
+  }, [coords]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -74,25 +88,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   async function refreshCoords(): Promise<Coords | null> {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return coords;
+      if (status !== 'granted') return coordsRef.current;
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      coordsRef.current = next;
       setCoords(next);
       setGpsLocked(true);
       return next;
     } catch {
-      return coords;
+      return coordsRef.current;
     }
   }
 
   /** Best-effort phone GPS upload for web/cloud map (does not block BLE SOS). */
-  async function postCitizenSos(type: string, position: Coords | null) {
-    // Use real coords if available; fall back to a placeholder so the server
-    // still receives and stores the SOS alert even without a GPS fix.
-    const lat = position?.lat ?? 0;
-    const lng = position?.lng ?? 0;
+  async function postCitizenSos(
+    type: string,
+    position: Coords | null,
+    mode: 'initial' | 'heartbeat' = 'initial',
+  ) {
+    // Use real coords if available; otherwise send null so the server stores
+    // the SOS as "location unavailable" instead of a bogus 0,0 pin.
+    const lat = position ? position.lat : null;
+    const lng = position ? position.lng : null;
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/sos`, {
@@ -109,17 +128,56 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      addLog(
-        'sos',
-        position
-          ? `SOS sent to server — ${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`
-          : 'SOS sent to server — no GPS fix (location unavailable)',
-      );
+      // Log only the first send and recovery after a failure; routine
+      // heartbeats stay silent so the in-app log isn't flooded.
+      if (mode === 'initial' || heartbeatFailedRef.current) {
+        const prefix = mode === 'initial' ? 'SOS sent to server' : 'SOS reconnected to server';
+        addLog(
+          'sos',
+          position
+            ? `${prefix} — ${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`
+            : `${prefix} — no GPS fix (location unavailable)`,
+        );
+      }
+      heartbeatFailedRef.current = false;
     } catch (error) {
       console.error('Failed to post citizen SOS GPS', error);
-      addLog('info', 'Could not reach server to place SOS on web map (BLE still active)');
+      // Log the first failure in a streak; repeated heartbeat failures stay quiet.
+      if (mode === 'initial' || !heartbeatFailedRef.current) {
+        addLog('info', 'Could not reach server to place SOS on web map (BLE still active)');
+      }
+      heartbeatFailedRef.current = true;
     }
   }
+
+  function stopHeartbeat() {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+  }
+
+  /** Re-send the SOS every 60 s so the server (10 min TTL) keeps it live. */
+  function startHeartbeat(type: string) {
+    stopHeartbeat();
+    const generation = sosGenerationRef.current;
+    heartbeatTimerRef.current = setInterval(async () => {
+      // Skip if the previous heartbeat is still in flight.
+      if (heartbeatInFlightRef.current) return;
+      heartbeatInFlightRef.current = true;
+      try {
+        const position = await refreshCoords();
+        // The SOS may have been stopped while waiting for GPS; don't re-create it.
+        if (sosGenerationRef.current !== generation || !sosActiveRef.current) return;
+        await postCitizenSos(type, position, 'heartbeat');
+      } finally {
+        heartbeatInFlightRef.current = false;
+      }
+    }, SOS_HEARTBEAT_MS);
+  }
+
+  // Stop the heartbeat timer on unmount.
+  useEffect(() => stopHeartbeat, []);
 
   async function clearCitizenSos() {
     try {
@@ -140,12 +198,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   async function startBeacon(type: string) {
     // 1. Activate SOS state immediately — gives instant UI feedback
     setSosActive(true);
+    sosActiveRef.current = true;
+    sosGenerationRef.current += 1;
+    heartbeatFailedRef.current = false;
     setDisasterType(type as DisasterType);
     addLog('sos', `SOS started — ${type.toUpperCase()} emergency`);
 
     // 2. HTTP upload — works on Expo Go and native builds (no BLE required)
+    const generation = sosGenerationRef.current;
     const position = await refreshCoords();
+    // Stopped while waiting for GPS — don't post or start the heartbeat.
+    if (sosGenerationRef.current !== generation) return;
     void postCitizenSos(type, position);
+    // Keep the server-side SOS alive while the beacon is on.
+    startHeartbeat(type);
 
     // 3. BLE broadcast — best-effort secondary channel for offline mesh
     try {
@@ -196,6 +262,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   async function stopBeacon() {
     setSosActive(false);
+    sosActiveRef.current = false;
+    sosGenerationRef.current += 1;
+    stopHeartbeat();
     setDisasterType(null);
     setBluetoothOn(false);
     void clearCitizenSos();
