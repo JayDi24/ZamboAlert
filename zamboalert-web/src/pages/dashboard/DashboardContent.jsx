@@ -14,6 +14,7 @@ import {
   Volume2,
 } from "lucide-react";
 import RescuerReviewModal from "../../components/RescuerReviewModal";
+import ConfirmDeleteRescuerModal from "../../components/ConfirmDeleteRescuerModal";
 import PersonnelPage from "../personnel-alert/PersonnelAlertPage";
 import SettingsPage from "../settings/SettingsPage";
 import { fmtTime, formatAlertLocation, formatPing } from "./dashboardData";
@@ -87,9 +88,29 @@ export default function DashboardContent({
     fetchRescuers();
   };
 
-  const handleRejectRescuer = async (dbId) => {
-    if (!window.confirm("Delete this rescuer account? They are signed out of the app and can register again with the same email. Their field logs are kept.")) return;
-    await apiFetch(`/api/rescuers/${dbId}`, { method: "DELETE" });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const handleRejectRescuer = (dbId) => {
+    const match =
+      (reviewRescuer && reviewRescuer.dbId === dbId ? reviewRescuer : null) ||
+      (pendingApprovals || []).find((r) => r.dbId === dbId) ||
+      (rescuers || []).find((r) => r.dbId === dbId);
+    setDeleteTarget({ dbId, name: match?.name || "", email: match?.email || "" });
+  };
+
+  const confirmDeleteRescuer = async () => {
+    if (!deleteTarget) return;
+    let response;
+    try {
+      response = await apiFetch(`/api/rescuers/${deleteTarget.dbId}`, { method: "DELETE" });
+    } catch {
+      throw new Error("Failed to connect to backend server.");
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Failed to delete rescuer account.");
+    }
+    setDeleteTarget(null);
     setReviewRescuer(null);
     fetchRescuers();
   };
@@ -241,14 +262,6 @@ export default function DashboardContent({
             <BarChart2 size={15} />
             <span>ZCDRRMO Incident Logs</span>
           </button>
-        </div>
-
-        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/60">
-          <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider font-mono">Mesh Network Relays</h4>
-        </div>
-
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-          <p className="p-3 text-xs text-slate-400 italic">No live mesh relays detected.</p>
         </div>
       </aside>
     </>
@@ -636,6 +649,13 @@ export default function DashboardContent({
           onClose={() => setReviewRescuer(null)}
           onApprove={handleApproveRescuer}
           onReject={handleRejectRescuer}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmDeleteRescuerModal
+          rescuer={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDeleteRescuer}
         />
       )}
       <header className="h-16 px-4 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0 z-40 shadow-xs">

@@ -9,6 +9,7 @@ import ActivityTab from "./ActivityTab";
 import RescuersTab from "./RescuersTab";
 import LocationTab from "./LocationTab";
 import { apiFetch } from "../dashboard/dashboardApi";
+import ConfirmDeleteRescuerModal from "../../components/ConfirmDeleteRescuerModal";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -346,27 +347,36 @@ export default function SettingsPage() {
     }
   };
 
-  const handleRejectRescuer = async (id) => {
-    if (!window.confirm("Delete this rescuer account? They are signed out of the app and can register again with the same email. Their field logs are kept.")) {
-      return;
-    }
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const handleRejectRescuer = (id) => {
+    const row =
+      (selectedRescuerForReview && selectedRescuerForReview.id === id ? selectedRescuerForReview : null) ||
+      dbRescuers.find((r) => r.id === id);
+    const name = row ? `${row.first_name || ""} ${row.last_name || ""}`.trim() : "";
+    setDeleteTarget({ id, name, email: row?.email || "" });
+  };
+
+  const confirmDeleteRescuer = async () => {
+    if (!deleteTarget) return;
+    let response;
     try {
-      const response = await apiFetch(`/api/rescuers/${id}`, {
+      response = await apiFetch(`/api/rescuers/${deleteTarget.id}`, {
         method: "DELETE",
       });
-      if (response.ok) {
-        showToast("Rescuer account deleted. The same email can register again.");
-        fetchRescuers();
-        setShowReviewModal(false);
-        setSelectedRescuerForReview(null);
-      } else {
-        const errData = await response.json();
-        alert(errData.message || "Failed to delete rescuer account");
-      }
     } catch (err) {
       console.error("Connection error", err);
-      alert("Failed to connect to backend server");
+      throw new Error("Failed to connect to backend server.");
     }
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to delete rescuer account.");
+    }
+    showToast("Rescuer account deleted. The same email can register again.");
+    fetchRescuers();
+    setShowReviewModal(false);
+    setSelectedRescuerForReview(null);
+    setDeleteTarget(null);
   };
 
   const [rescuerSearch, setRescuerSearch] = useState("");
@@ -397,6 +407,14 @@ export default function SettingsPage() {
           </div>
           <span className="text-[11px] font-medium tracking-wide">{toastMsg}</span>
         </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteRescuerModal
+          rescuer={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDeleteRescuer}
+        />
       )}
 
       <header className="h-16 px-6 bg-white border-b border-slate-200 sticky top-0 z-[100] flex items-center justify-between select-none">
