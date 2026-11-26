@@ -21,6 +21,7 @@ import {
   formatRange,
   radioSummary,
 } from "./loraRange";
+import { DRIFT_THRESHOLD_M, useSteadyPodPositions } from "./podDriftFilter";
 
 // Rescuer GPS older than this is drawn greyed out as possibly stale.
 const RESCUER_LOCATION_STALE_SEC = 120;
@@ -382,13 +383,16 @@ export function TacticalMap({
   alerts = [],
   rescuers = [],
   casualties = [],
-  pods = [],
+  pods: rawPods = [],
   selected,
   onSelect,
   selectedCasualtyId,
   onSelectCasualty,
   onDispatchToTarget,
 }) {
+  // Everything on the map (markers, range rings, gateway distances) uses the
+  // steadied positions so indoor GPS wobble doesn't make pods wander.
+  const pods = useSteadyPodPositions(rawPods);
   const [is3D, setIs3D] = useState(true);
   const [pitchAngle, setPitchAngle] = useState(58);
   const [showDetectionWeb, setShowDetectionWeb] = useState(false);
@@ -1109,6 +1113,14 @@ export function TacticalMap({
       range.textContent = `LoRa range ${podRangeLabel} (${POD_RANGE_IS_MEASURED ? "measured" : "est."}, ${radioSummary()})`;
       range.style.color = "#64748b";
       popupContent.append(title, details, signal, range);
+      if (Number.isFinite(pod.gpsJitterM)) {
+        const drift = document.createElement("div");
+        drift.textContent =
+          `GPS wobble ±${pod.gpsJitterM} m over last ${pod.gpsSamples} fix${pod.gpsSamples === 1 ? "" : "es"}` +
+          ` · marker holds still under ${DRIFT_THRESHOLD_M} m`;
+        drift.style.color = "#64748b";
+        popupContent.append(drift);
+      }
 
       const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat([pod.lng, pod.lat])
