@@ -21,17 +21,27 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const { db, podTelemetry, citizenSos } = require('./database');
+const { db, ready: dbReady, podTelemetry, citizenSos } = require('./database');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const IS_PROD = process.env.NODE_ENV === 'production';
+const IS_TEST = process.env.NODE_ENV === 'test';
+// NODE_ENV=test only: sendMail records messages here instead of sending them.
+const sentMail = [];
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET is not set. Add it to backend/.env (or the Render env vars).');
   process.exit(1);
 }
 const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;   // 10 min
+const TWO_FA_TTL_MS            = 5 * 60 * 1000;    // 5 min
+const PASSWORD_RESET_TTL_MS    = 15 * 60 * 1000;   // 15 min (matches email text)
+const DOC_UPLOAD_TOKEN_TTL_MS  = 24 * 60 * 60 * 1000; // 24 h
+const LOCKOUT_MS               = 15 * 60 * 1000;   // 15 min
+const MAX_CODE_ATTEMPTS        = 5;   // wrong guesses per email/2FA/reset code
+const MAX_LOGIN_FAILURES       = 5;   // wrong passwords before lockout
+const MAX_2FA_RESENDS          = 3;   // resends per password-verified 2FA challenge
 const CITIZEN_SOS_TTL_MS       = 10 * 60 * 1000;   // 10 min
 const POD_TTL_MS               = 90 * 1000;         // 90 s
 const DISASTER_TYPES = new Set(['earthquake', 'flood', 'landslide']);
@@ -113,6 +123,66 @@ function validNumber(v, min, max) {
   return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
 }
 
+/** Constant-time comparison of two hex digests (false if either is missing). */
+function hashesEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  const ab = Buffer.from(a), bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
+/** Short, collision-resistant id for a citizen phone: 8 uppercase hex chars of sha256(clientId). */
+function sosShortId(clientId) {
+  return crypto.createHash('sha256').update(clientId).digest('hex').slice(0, 8).toUpperCase();
+}
+
+/** Node id of the virtual "CITIZEN-APP-GATEWAY" pod that mirrors a phone SOS. */
+function virtualPodNodeId(clientId) {
+  return crypto.createHash('md5').update(clientId).digest('hex').slice(0, 6).toUpperCase();
+}
+
+function minutesUntil(ts) {
+  return Math.max(1, Math.ceil((Number(ts) - Date.now()) / 60000));
+}
+
+function lockoutMessage(lockoutUntil) {
+  const n = minutesUntil(lockoutUntil);
+  return `Too many failed sign-in attempts. Try again in ${n} minute${n === 1 ? '' : 's'}.`;
+}
+
+const OFFICIAL_PENDING_MSG = 'Your barangay official account is waiting for approval by an administrator.';
+
+/** True only for an official explicitly marked unapproved (0); NULL/legacy rows count as approved. */
+function isOfficialPending(user) {
+  return user.official_approved !== null && user.official_approved !== undefined && Number(user.official_approved) === 0;
+}
+
+// Promise wrappers over the callback sqlite3 API
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => db.get(sql, params, (err, row) => err ? reject(err) : resolve(row)));
+}
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => db.run(sql, params, function (err) { err ? reject(err) : resolve(this); }));
+}
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows)));
+}
+
+/**
+ * Count one wrong guess against the code currently stored in `codeCol`
+ * (atomically, and only if that code is still the current one). If the count
+ * reaches MAX_CODE_ATTEMPTS the code is cleared. Returns true when the code was
+ * burned (caller should answer 429).
+ */
+async function countWrongGuess(userId, codeCol, expiresCol, attemptsCol, storedHash) {
+  await dbRun(`UPDATE users SET ${attemptsCol}=COALESCE(${attemptsCol},0)+1 WHERE id=? AND ${codeCol}=?`, [userId, storedHash]);
+  const row = await dbGet(`SELECT ${attemptsCol} AS n FROM users WHERE id=?`, [userId]);
+  if ((Number(row && row.n) || 0) >= MAX_CODE_ATTEMPTS) {
+    await dbRun(`UPDATE users SET ${codeCol}=NULL, ${expiresCol}=NULL, ${attemptsCol}=0 WHERE id=? AND ${codeCol}=?`, [userId, storedHash]);
+    return true;
+  }
+  return false;
+}
+
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
 function getTransporter() {
@@ -150,6 +220,12 @@ function getTransporter() {
 }
 
 async function sendMail(to, subject, text, html, code = null) {
+  // 0. Test mode: capture instead of sending (never contacts a provider)
+  if (IS_TEST) {
+    sentMail.push({ to, subject, text, code });
+    return true;
+  }
+
   // 1. Resend API (HTTPS — immune to SMTP port blocking)
   if (process.env.RESEND_API_KEY) {
     try {
@@ -258,8 +334,10 @@ function requireOfficial(req, res, next) {
 
 // ── Middleware: Rescuer mobile session guard ──────────────────────────────────
 // Requires the mobile session JWT from buildSession(), sent as
-// "Authorization: Bearer <token>". Only verified-login rescuers may pass.
-function requireRescuer(req, res, next) {
+// "Authorization: Bearer <token>". Only verified-login rescuers may pass, and
+// the account must still exist and be approved (a deleted or un-approved
+// rescuer's 7-day token stops working immediately).
+async function requireRescuer(req, res, next) {
   const match = /^Bearer\s+(\S+)$/i.exec(req.get('Authorization') || '');
   if (!match) {
     return res.status(401).json({ message: 'Sign in required.' });
@@ -273,6 +351,17 @@ function requireRescuer(req, res, next) {
   }
   if (payload.kind !== 'mobile' || payload.role !== 'rescuer') {
     return res.status(401).json({ message: 'Rescuer session required.' });
+  }
+  // Look up by user id, so a token from a deleted account is refused even if
+  // the same email has registered again (the new account gets a new id).
+  let account;
+  try {
+    account = await dbGet("SELECT is_rescuer_verified FROM users WHERE id=? AND role='rescuer'", [String(payload.userId)]);
+  } catch (e) {
+    return res.status(500).json({ message: 'Database error.' });
+  }
+  if (!account || account.is_rescuer_verified !== 1) {
+    return res.status(401).json({ message: 'This rescuer account was removed or is no longer approved. Please sign in again.' });
   }
   req.mobileUser = payload;
   next();
@@ -358,29 +447,43 @@ app.post('/api/sos', (req, res) => {
   const clientId = typeof body.clientId === 'string' ? body.clientId.trim().slice(0, 64) : '';
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : 'Citizen';
   const disasterType = typeof body.disasterType === 'string' ? body.disasterType.trim().toLowerCase() : '';
-  if (!clientId || !validNumber(body.lat, -90, 90) || !validNumber(body.lng, -180, 180) || !DISASTER_TYPES.has(disasterType)) {
+  // lat and lng both null/omitted = "no location". If either is given, both must be valid.
+  const latGiven = body.lat !== undefined && body.lat !== null;
+  const lngGiven = body.lng !== undefined && body.lng !== null;
+  const hasLocation = latGiven || lngGiven;
+  if (!clientId || !DISASTER_TYPES.has(disasterType) ||
+      (hasLocation && (!validNumber(body.lat, -90, 90) || !validNumber(body.lng, -180, 180)))) {
     return res.status(400).json({ message: 'Invalid citizen SOS payload.' });
   }
+  const lat = hasLocation ? body.lat : null;
+  const lng = hasLocation ? body.lng : null;
+  const shortId = sosShortId(clientId);
   const receivedAt = new Date().toISOString();
   const report = {
-    id: `SOS-${clientId.slice(0, 8).toUpperCase()}`, clientId,
-    name: name || 'Citizen', lat: body.lat, lng: body.lng,
+    id: `SOS-${shortId}`, clientId,
+    name: name || 'Citizen', lat, lng,
     disasterType, status: 'active', receivedAt,
   };
   const idx = citizenSos.findIndex(s => s.clientId === clientId);
   if (idx === -1) citizenSos.push(report); else citizenSos[idx] = report;
 
-  // Mirror to podTelemetry as a virtual "CITIZEN-APP-GATEWAY" pod
-  const virtualNodeId = crypto.createHash('md5').update(clientId).digest('hex').slice(0, 6).toUpperCase();
+  // Mirror to podTelemetry as a virtual "CITIZEN-APP-GATEWAY" pod — only when
+  // the phone has a location. Without one, drop any earlier virtual pod so the
+  // map does not show a stale position.
+  const virtualNodeId = virtualPodNodeId(clientId);
+  const pidx = podTelemetry.findIndex(p => p.nodeId === virtualNodeId);
+  if (!hasLocation) {
+    if (pidx !== -1 && podTelemetry[pidx].gatewayId === 'CITIZEN-APP-GATEWAY') podTelemetry.splice(pidx, 1);
+    return res.status(202).json({ message: 'Citizen SOS received.', id: report.id, clientId, virtualNodeId: null });
+  }
   const virtualPod = {
     nodeId: virtualNodeId, gatewayId: 'CITIZEN-APP-GATEWAY',
-    seq: 1, msgType: 1, fix: true, lat: body.lat, lng: body.lng,
-    gatewayLat: body.lat, gatewayLng: body.lng, sats: 12, bleVictims: 1,
-    nearestRssi: -45, nearestVictimId: clientId.slice(0, 8).toUpperCase(),
+    seq: 1, msgType: 1, fix: true, lat, lng,
+    gatewayLat: lat, gatewayLng: lng, sats: 12, bleVictims: 1,
+    nearestRssi: -45, nearestVictimId: shortId,
     victimStatus: 3, hopCount: 0, uptime: 60, loraRssi: -50, loraSnr: 9.0,
     receivedAt,
   };
-  const pidx = podTelemetry.findIndex(p => p.nodeId === virtualNodeId);
   if (pidx === -1) podTelemetry.push(virtualPod); else podTelemetry[pidx] = virtualPod;
 
   return res.status(202).json({ message: 'Citizen SOS received.', id: report.id, clientId, virtualNodeId });
@@ -402,7 +505,7 @@ app.delete('/api/sos', (req, res) => {
 
   const before = citizenSos.length;
   citizenSos.splice(0, citizenSos.length, ...citizenSos.filter(s => s.clientId !== clientId));
-  const virtualNodeId = crypto.createHash('md5').update(clientId).digest('hex').slice(0, 6).toUpperCase();
+  const virtualNodeId = virtualPodNodeId(clientId);
   podTelemetry.splice(0, podTelemetry.length, ...podTelemetry.filter(p => p.nodeId !== virtualNodeId));
 
   return res.status(200).json({ message: 'Citizen SOS cleared.', clientId });
@@ -466,12 +569,16 @@ app.post('/api/auth/signup', async (req, res) => {
     const code = generateCode();
     const userId = String(Date.now());
     const isRescuer = role === 'rescuer';
+    // Rescuers get a random token (valid 24 h) that authorizes uploading their
+    // ID documents via /api/auth/rescuer-verify and /api/rescuers/register.
+    const docUploadToken = isRescuer ? crypto.randomBytes(24).toString('hex') : null;
     await new Promise((resolve, reject) => {
       db.run(
         `INSERT INTO users (id, first_name, last_name, email, password_hash, role, is_verified, is_rescuer_verified,
            contact_number, id_type, id_number, id_front_uri, id_back_uri,
-           email_verification_code_hash, email_verification_expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           email_verification_code_hash, email_verification_expires_at,
+           doc_upload_token_hash, doc_upload_token_expires)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId, firstName.trim(), lastName.trim(), email.trim().toLowerCase(),
           sha256(password), role,
@@ -483,10 +590,13 @@ app.post('/api/auth/signup', async (req, res) => {
           isRescuer ? (idBackUri || null) : null,
           sha256(code),
           Date.now() + VERIFICATION_CODE_TTL_MS,
+          docUploadToken ? sha256(docUploadToken) : null,
+          docUploadToken ? Date.now() + DOC_UPLOAD_TOKEN_TTL_MS : null,
         ],
         err => err ? reject(err) : resolve()
       );
     });
+    const tokenField = docUploadToken ? { docUploadToken } : {};
 
     try {
       const html = verificationEmailHtml(`${firstName} ${lastName}`, code);
@@ -494,10 +604,10 @@ app.post('/api/auth/signup', async (req, res) => {
         `Your verification code is ${code}. It expires in 10 minutes.`, html, code);
     } catch (mailErr) {
       console.error('Signup email failed:', mailErr.message);
-      return res.status(503).json({ error: 'Could not send verification email. Check Gmail config and try again.' });
+      return res.status(503).json({ error: 'Could not send verification email. Check Gmail config and try again.', ...tokenField });
     }
 
-    return res.json({ success: true, email: email.trim().toLowerCase() });
+    return res.json({ success: true, email: email.trim().toLowerCase(), ...tokenField });
   } catch (err) {
     console.error('Signup error:', err);
     return res.status(500).json({ error: 'Could not create your account. Please try again.' });
@@ -521,12 +631,20 @@ app.post('/api/auth/register', async (req, res) => {
       if (existing.is_verified) {
         return res.status(400).json({ message: 'An account with this email already exists. Please log in.' });
       }
-      // Unverified — update and resend code
+      // Only an unverified barangay official registration may be restarted here;
+      // never overwrite an unverified citizen/rescuer/admin account.
+      if (existing.role !== 'barangay_official') {
+        return res.status(400).json({ message: 'An account with this email already exists.', error: 'An account with this email already exists.' });
+      }
+      // Unverified official — update, send a new code, and (re)queue for approval
+      const bcryptHash = await bcrypt.hash(password, 10);
       await new Promise((resolve, reject) => {
         db.run(
-          `UPDATE users SET first_name=?, last_name=?, password_hash=?, contact_number=?,
-             email_verification_code_hash=?, email_verification_expires_at=? WHERE id=?`,
-          [firstName.trim(), lastName.trim(), sha256(password), phone, sha256(code), codeExpires, existing.id],
+          `UPDATE users SET first_name=?, last_name=?, password_hash=?, password_bcrypt=?, contact_number=?,
+             email_verification_code_hash=?, email_verification_expires_at=?, email_verification_attempts=0,
+             official_approved=0 WHERE id=?`,
+          [firstName.trim(), lastName.trim(),
+           sha256(password), bcryptHash, phone, sha256(code), codeExpires, existing.id],
           err => err ? reject(err) : resolve()
         );
       });
@@ -540,8 +658,9 @@ app.post('/api/auth/register', async (req, res) => {
       await new Promise((resolve, reject) => {
         db.run(
           `INSERT INTO users (id, first_name, last_name, email, username, password_hash, password_bcrypt, role,
-             contact_number, phone_number, email_verification_code_hash, email_verification_expires_at, is_verified)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+             contact_number, phone_number, email_verification_code_hash, email_verification_expires_at, is_verified,
+             official_approved)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
           [
             userId, firstName.trim(), lastName.trim(), cleanEmail,
             `${firstName.trim()} ${lastName.trim()}`,
@@ -581,15 +700,22 @@ app.post('/api/auth/verify-email', (req, res) => {
     if (!user) return res.status(404).json({ error: 'User account not found.' });
 
     const isExpired = !user.email_verification_expires_at || user.email_verification_expires_at <= Date.now();
-    const matchesCode = user.email_verification_code_hash
-      ? user.email_verification_code_hash === sha256(code.trim())
-      : false;
+    const matchesCode = hashesEqual(user.email_verification_code_hash, sha256(code.trim()));
 
     if (isExpired) return res.status(400).json({ error: 'That verification code has expired. Request a new code and try again.' });
-    if (!matchesCode) return res.status(400).json({ error: 'Incorrect verification code. Please try again.' });
+    if (!matchesCode) {
+      // Max 5 wrong guesses per code; then the code is cleared and a new one is needed.
+      countWrongGuess(user.id, 'email_verification_code_hash', 'email_verification_expires_at',
+        'email_verification_attempts', user.email_verification_code_hash)
+        .then(burned => burned
+          ? res.status(429).json({ error: 'Too many incorrect attempts. Request a new code and try again.' })
+          : res.status(400).json({ error: 'Incorrect verification code. Please try again.' }))
+        .catch(() => res.status(500).json({ error: 'Database error.' }));
+      return;
+    }
 
     db.run(
-      'UPDATE users SET is_verified=1, email_verification_code_hash=NULL, email_verification_expires_at=NULL WHERE id=?',
+      'UPDATE users SET is_verified=1, email_verification_code_hash=NULL, email_verification_expires_at=NULL, email_verification_attempts=0 WHERE id=?',
       [user.id],
       updateErr => {
         if (updateErr) return res.status(500).json({ error: 'Could not complete verification.' });
@@ -614,12 +740,25 @@ app.post('/api/auth/resend-code', async (req, res) => {
 
     const code = generateCode();
     const isMfa = type === 'mfa';
-    const expires = isMfa ? Date.now() + 5 * 60 * 1000 : Date.now() + VERIFICATION_CODE_TTL_MS;
+    const expires = isMfa ? Date.now() + TWO_FA_TTL_MS : Date.now() + VERIFICATION_CODE_TTL_MS;
 
+    if (isMfa) {
+      // A 2FA code may only be re-sent while a password-verified login
+      // challenge is still pending; otherwise anyone could request codes.
+      const pending = !!user.two_fa_code && Number(user.two_fa_expires) > Date.now();
+      if (!pending) {
+        return res.status(400).json({ error: 'Sign in again to get a new code.', message: 'Sign in again to get a new code.' });
+      }
+      if ((Number(user.two_fa_resends) || 0) >= MAX_2FA_RESENDS) {
+        return res.status(429).json({ error: 'Too many code requests. Sign in again.', message: 'Too many code requests. Sign in again.' });
+      }
+    }
+
+    // New code: fresh expiry and a reset wrong-guess counter.
     const sql = isMfa
-      ? 'UPDATE users SET two_fa_code=?, two_fa_expires=? WHERE id=?'
-      : 'UPDATE users SET email_verification_code_hash=?, email_verification_expires_at=? WHERE id=?';
-    const val = isMfa ? code : sha256(code);
+      ? 'UPDATE users SET two_fa_code=?, two_fa_expires=?, two_fa_attempts=0, two_fa_resends=COALESCE(two_fa_resends,0)+1 WHERE id=?'
+      : 'UPDATE users SET email_verification_code_hash=?, email_verification_expires_at=?, email_verification_attempts=0 WHERE id=?';
+    const val = sha256(code);
 
     db.run(sql, [val, expires, user.id], async updateErr => {
       if (updateErr) return res.status(500).json({ error: 'Could not update verification request.' });
@@ -649,6 +788,12 @@ app.post('/api/auth/login', async (req, res) => {
       if (err) return res.status(500).json({ error: 'Database error.', message: 'Database error.' });
       if (!user) return res.status(400).json({ error: 'Incorrect email or password.', message: 'Incorrect email or password.' });
 
+      // Locked out after too many wrong passwords: refuse without checking the password.
+      if (user.lockout_until && Number(user.lockout_until) > Date.now()) {
+        const msg = lockoutMessage(user.lockout_until);
+        return res.status(429).json({ error: msg, message: msg });
+      }
+
       if (role && user.role !== role) {
         return res.status(400).json({
           error: `This account is registered as a ${user.role}, not a ${role}.`,
@@ -670,16 +815,32 @@ app.post('/api/auth/login', async (req, res) => {
       }
 
       if (!sha256Match && !bcryptMatch) {
-        db.run('UPDATE users SET failed_attempts=failed_attempts+1 WHERE id=?', [user.id]);
+        try {
+          // Count the failure; the 5th one starts a lockout and resets the counter.
+          await dbRun(
+            `UPDATE users SET
+               lockout_until = CASE WHEN COALESCE(failed_attempts,0)+1 >= ? THEN ? ELSE lockout_until END,
+               failed_attempts = CASE WHEN COALESCE(failed_attempts,0)+1 >= ? THEN 0 ELSE COALESCE(failed_attempts,0)+1 END
+             WHERE id=?`,
+            [MAX_LOGIN_FAILURES, Date.now() + LOCKOUT_MS, MAX_LOGIN_FAILURES, user.id]
+          );
+          const after = await dbGet('SELECT lockout_until FROM users WHERE id=?', [user.id]);
+          if (after && after.lockout_until && Number(after.lockout_until) > Date.now()) {
+            const msg = lockoutMessage(after.lockout_until);
+            return res.status(429).json({ error: msg, message: msg });
+          }
+        } catch (e) {
+          return res.status(500).json({ error: 'Database error.', message: 'Database error.' });
+        }
         return res.status(400).json({ error: 'Incorrect email or password.', message: 'Incorrect email or password.' });
       }
 
-      db.run('UPDATE users SET failed_attempts=0 WHERE id=?', [user.id]);
+      db.run('UPDATE users SET failed_attempts=0, lockout_until=NULL WHERE id=?', [user.id]);
 
       if (!user.is_verified) {
         // Re-send verification code
         const code = generateCode();
-        db.run('UPDATE users SET email_verification_code_hash=?, email_verification_expires_at=? WHERE id=?',
+        db.run('UPDATE users SET email_verification_code_hash=?, email_verification_expires_at=?, email_verification_attempts=0 WHERE id=?',
           [sha256(code), Date.now() + VERIFICATION_CODE_TTL_MS, user.id]);
         const username = `${user.first_name} ${user.last_name}`.trim();
         try {
@@ -689,11 +850,20 @@ app.post('/api/auth/login', async (req, res) => {
         return res.json({ requiresVerification: true, email: user.email, unverified: true, message: 'Please verify your email.' });
       }
 
-      // Web dashboard users (barangay_official) require 2FA
-      if (user.role === 'barangay_official' || user.role === 'admin') {
+      // Web dashboard users (barangay_official) require admin approval, then 2FA
+      if (DASHBOARD_ROLES.has(user.role)) {
+        if (isOfficialPending(user)) {
+          return res.status(403).json({ error: OFFICIAL_PENDING_MSG, message: OFFICIAL_PENDING_MSG });
+        }
         const code = generateCode();
-        const expires = Date.now() + 5 * 60 * 1000;
-        db.run('UPDATE users SET two_fa_code=?, two_fa_expires=? WHERE id=?', [code, expires, user.id]);
+        const expires = Date.now() + TWO_FA_TTL_MS;
+        // New password-verified challenge: hashed code, fresh attempt/resend counters.
+        try {
+          await dbRun('UPDATE users SET two_fa_code=?, two_fa_expires=?, two_fa_attempts=0, two_fa_resends=0 WHERE id=?',
+            [sha256(code), expires, user.id]);
+        } catch (e) {
+          return res.status(500).json({ error: 'Database error.', message: 'Database error.' });
+        }
         const username = `${user.first_name} ${user.last_name}`.trim();
         const emailSent = await sendMail(
           user.email,
@@ -724,35 +894,57 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // POST /api/auth/verify-2fa
-app.post('/api/auth/verify-2fa', (req, res) => {
-  const usernameOrEmail = (req.body.username || req.body.email || '').trim().toLowerCase();
+app.post('/api/auth/verify-2fa', async (req, res) => {
+  const usernameOrEmail = (req.body.username || req.body.email || '').toString().trim().toLowerCase();
   const code = (req.body.code || '').toString().trim();
-  if (!usernameOrEmail) return res.status(400).json({ error: 'Username or email is required.', message: 'Username or email is required.' });
+  const fail = (status, msg) => res.status(status).json({ error: msg, message: msg });
+  if (!usernameOrEmail) return fail(400, 'Username or email is required.');
+  if (!code) return fail(400, 'Enter the 2FA code from your email.');
 
-  db.get(
-    'SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?',
-    [usernameOrEmail, usernameOrEmail],
-    (err, user) => {
-      if (err) return res.status(500).json({ error: 'Database error.' });
-      if (!user) return res.status(404).json({ error: 'User account not found.' });
+  let user;
+  try {
+    user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?', [usernameOrEmail, usernameOrEmail]);
+  } catch (e) {
+    return fail(500, 'Database error.');
+  }
+  if (!user) return fail(404, 'User account not found.');
+  if (!DASHBOARD_ROLES.has(user.role)) return fail(403, 'This account cannot use the dashboard.');
+  if (isOfficialPending(user)) return fail(403, OFFICIAL_PENDING_MSG);
 
-      if (user.two_fa_code !== code) return res.status(400).json({ message: 'Invalid 2FA code.' });
-      if (Date.now() > user.two_fa_expires) return res.status(400).json({ message: '2FA code has expired.' });
+  // There must be a pending challenge created by a password-verified login.
+  if (!user.two_fa_code || !user.two_fa_expires) return fail(400, 'Sign in again to get a new code.');
+  if (Date.now() > Number(user.two_fa_expires)) return fail(400, '2FA code has expired.');
 
-      db.run('UPDATE users SET two_fa_code=NULL, two_fa_expires=NULL WHERE id=?', [user.id]);
-
-      const token = jwt.sign(
-        { sub: `${user.first_name} ${user.last_name}`.trim(), email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-      return res.json({
-        success: true, message: 'Login successful.', token,
-        user: `${user.first_name} ${user.last_name}`.trim(),
-        expiry: Date.now() + 60 * 60 * 1000,
-      });
+  if (!hashesEqual(user.two_fa_code, sha256(code))) {
+    try {
+      const burned = await countWrongGuess(user.id, 'two_fa_code', 'two_fa_expires', 'two_fa_attempts', user.two_fa_code);
+      return burned ? fail(429, 'Too many attempts. Sign in again.') : fail(400, 'Invalid 2FA code.');
+    } catch (e) {
+      return fail(500, 'Database error.');
     }
+  }
+
+  // Consume the challenge; if it was cleared or replaced meanwhile, refuse.
+  try {
+    const result = await dbRun(
+      'UPDATE users SET two_fa_code=NULL, two_fa_expires=NULL, two_fa_attempts=0, two_fa_resends=0 WHERE id=? AND two_fa_code=?',
+      [user.id, user.two_fa_code]
+    );
+    if (result.changes !== 1) return fail(400, 'Sign in again to get a new code.');
+  } catch (e) {
+    return fail(500, 'Database error.');
+  }
+
+  const token = jwt.sign(
+    { sub: `${user.first_name} ${user.last_name}`.trim(), email: user.email, role: user.role },
+    JWT_SECRET,
+    { expiresIn: '1h' }
   );
+  return res.json({
+    success: true, message: 'Login successful.', token,
+    user: `${user.first_name} ${user.last_name}`.trim(),
+    expiry: Date.now() + 60 * 60 * 1000,
+  });
 });
 
 // POST /api/auth/forgot-password  /  POST /api/auth/request-reset
@@ -765,7 +957,13 @@ const handleForgotPassword = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'No account found for that email.', message: 'No account found for that email.' });
 
     const code = generateCode();
-    db.run('UPDATE users SET password_reset_code=? WHERE id=?', [code, user.id]);
+    // Stored hashed, valid 15 minutes, with a fresh wrong-guess counter.
+    try {
+      await dbRun('UPDATE users SET password_reset_code=?, password_reset_expires=?, password_reset_attempts=0 WHERE id=?',
+        [sha256(code), Date.now() + PASSWORD_RESET_TTL_MS, user.id]);
+    } catch (e) {
+      return res.status(500).json({ error: 'Database error.', message: 'Database error.' });
+    }
 
     const username = `${user.first_name} ${user.last_name}`.trim();
     const html = `<div style="font-family:sans-serif;padding:20px;max-width:500px;margin:auto;">
@@ -789,38 +987,71 @@ app.post('/api/auth/reset-password', async (req, res) => {
   const { email, code, newPassword } = req.body;
   if (!email || !code || !newPassword) return res.status(400).json({ error: 'All fields are required.' });
 
-  db.get('SELECT * FROM users WHERE LOWER(email) = ?', [email.trim().toLowerCase()], async (err, user) => {
-    if (err) return res.status(500).json({ error: 'Database error.' });
-    if (!user || user.password_reset_code !== code.trim()) {
-      return res.status(400).json({ error: 'Invalid or expired recovery code.' });
+  const invalid = { error: 'Invalid or expired recovery code.', message: 'Invalid or expired recovery code.' };
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [String(email).trim().toLowerCase()]);
+    if (!user || !user.password_reset_code) return res.status(400).json(invalid);
+    if (!user.password_reset_expires || Number(user.password_reset_expires) <= Date.now()) {
+      return res.status(400).json(invalid);
+    }
+    if (!hashesEqual(user.password_reset_code, sha256(String(code).trim()))) {
+      const burned = await countWrongGuess(user.id, 'password_reset_code', 'password_reset_expires',
+        'password_reset_attempts', user.password_reset_code);
+      if (burned) {
+        const msg = 'Too many incorrect attempts. Request a new recovery code.';
+        return res.status(429).json({ error: msg, message: msg });
+      }
+      return res.status(400).json(invalid);
     }
 
     const bcryptHash = await bcrypt.hash(newPassword, 10);
-    db.run(
-      'UPDATE users SET password_hash=?, password_bcrypt=?, password_reset_code=NULL, failed_attempts=0, is_verified=1 WHERE id=?',
-      [sha256(newPassword), bcryptHash, user.id],
-      updateErr => {
-        if (updateErr) return res.status(500).json({ error: 'Failed to reset password.' });
-        return res.json({ success: true, message: 'Password reset successfully.' });
-      }
+    // Only succeeds if the same code is still current (not burned/replaced meanwhile).
+    const result = await dbRun(
+      `UPDATE users SET password_hash=?, password_bcrypt=?, password_reset_code=NULL, password_reset_expires=NULL,
+         password_reset_attempts=0, failed_attempts=0, lockout_until=NULL, is_verified=1
+       WHERE id=? AND password_reset_code=?`,
+      [sha256(newPassword), bcryptHash, user.id, user.password_reset_code]
     );
-  });
+    if (result.changes !== 1) return res.status(400).json(invalid);
+    return res.json({ success: true, message: 'Password reset successfully.' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to reset password.', message: 'Failed to reset password.' });
+  }
 });
 
+// Rescuer ID-document uploads are authorized by the docUploadToken returned
+// from /api/auth/signup (role rescuer). Returns the matching rescuer user row,
+// or null when the token is missing, wrong, or expired.
+const DOC_TOKEN_EXPIRED_MSG = 'Your verification session has expired. Contact the barangay office to finish rescuer verification.';
+async function findRescuerByDocToken(email, token) {
+  if (typeof email !== 'string' || typeof token !== 'string' || !email.trim() || !token) return null;
+  const user = await dbGet("SELECT * FROM users WHERE LOWER(email) = ? AND role = 'rescuer'", [email.trim().toLowerCase()]);
+  if (!user || !user.doc_upload_token_hash) return null;
+  if (!user.doc_upload_token_expires || Number(user.doc_upload_token_expires) <= Date.now()) return null;
+  return hashesEqual(user.doc_upload_token_hash, sha256(token)) ? user : null;
+}
+
 // POST /api/auth/rescuer-verify  (mobile rescuer submits ID docs)
-app.post('/api/auth/rescuer-verify', (req, res) => {
-  const { email, idType, idNumber, idFrontUri, idBackUri } = req.body;
+app.post('/api/auth/rescuer-verify', async (req, res) => {
+  const { email, idType, idNumber, idFrontUri, idBackUri, docUploadToken } = req.body;
   if (!email || !idType || !idNumber) return res.status(400).json({ error: 'Email, ID type, and ID number are required.' });
 
-  db.run(
-    'UPDATE users SET id_type=?, id_number=?, id_front_uri=?, id_back_uri=?, is_rescuer_verified=0 WHERE LOWER(email)=? AND role=?',
-    [idType.trim(), idNumber.trim(), idFrontUri || '', idBackUri || '', email.trim().toLowerCase(), 'rescuer'],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Database error.' });
-      if (this.changes === 0) return res.status(404).json({ error: 'Rescuer account not found.' });
-      return res.json({ success: true, message: 'Verification documents submitted. Awaiting admin approval.' });
+  try {
+    const user = await findRescuerByDocToken(email, docUploadToken);
+    if (!user) return res.status(401).json({ error: DOC_TOKEN_EXPIRED_MSG, message: DOC_TOKEN_EXPIRED_MSG });
+    if (user.is_rescuer_verified === 1) {
+      const msg = 'This rescuer account is already approved. Its ID documents cannot be changed here.';
+      return res.status(409).json({ error: msg, message: msg });
     }
-  );
+    const result = await dbRun(
+      'UPDATE users SET id_type=?, id_number=?, id_front_uri=?, id_back_uri=?, is_rescuer_verified=0 WHERE id=? AND role=?',
+      [String(idType).trim(), String(idNumber).trim(), idFrontUri || '', idBackUri || '', user.id, 'rescuer']
+    );
+    if (result.changes === 0) return res.status(404).json({ error: 'Rescuer account not found.' });
+    return res.json({ success: true, message: 'Verification documents submitted. Awaiting admin approval.' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Database error.' });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -855,6 +1086,12 @@ app.get('/api/rescuers/locations', requireOfficial, (req, res) => {
       res.json(rows);
     }
   );
+});
+
+// GET /api/rescuers/me/session — the rescuer app polls this to find out that its
+// account was deleted or un-approved (requireRescuer answers 401), so it can sign out.
+app.get('/api/rescuers/me/session', requireRescuer, (req, res) => {
+  res.json({ active: true });
 });
 
 // POST /api/rescuers/me/location — rescuer mobile app reports its own GPS.
@@ -893,11 +1130,20 @@ app.get('/api/rescuers/:id', requireOfficial, (req, res) => {
 });
 
 // POST /api/rescuers/register — register from mobile app
-app.post('/api/rescuers/register', (req, res) => {
-  const { email, first_name, last_name, phone_number, id_type, id_number } = req.body;
+app.post('/api/rescuers/register', async (req, res) => {
+  const { email, first_name, last_name, phone_number, id_type, id_number, docUploadToken } = req.body;
   if (!email || !first_name || !last_name || !id_type || !id_number) {
     return res.status(400).json({ message: 'Required fields are missing.' });
   }
+  // Same upload token as /api/auth/rescuer-verify: only the rescuer who just
+  // signed up can create their rescuers row.
+  let tokenUser;
+  try {
+    tokenUser = await findRescuerByDocToken(email, docUploadToken);
+  } catch (e) {
+    return res.status(500).json({ message: 'Database error.' });
+  }
+  if (!tokenUser) return res.status(401).json({ error: DOC_TOKEN_EXPIRED_MSG, message: DOC_TOKEN_EXPIRED_MSG });
   db.get("SELECT value FROM settings WHERE key = 'require_rescuer_approval'", [], (err, row) => {
     const defaultVerified = (!err && row && row.value === '0') ? 1 : 0;
     const defaultStatus = defaultVerified === 1 ? 'available' : 'offline';
@@ -944,22 +1190,32 @@ app.post('/api/rescuers/verify/:id', requireOfficial, (req, res) => {
 });
 
 // DELETE /api/rescuers/:id
-app.delete('/api/rescuers/:id', requireOfficial, (req, res) => {
-  db.get('SELECT email FROM rescuers WHERE id=?', [req.params.id], (findErr, row) => {
-    if (findErr) return res.status(500).json({ message: 'Failed to delete rescuer', error: findErr.message });
+// Deletes the rescuer completely: the admin-panel row (rescuers) AND the mobile
+// login account (users), so the same email can sign up again. Field logs in
+// rescuer_reports / casualty_logs are kept as history (they store the name and
+// email as text, not a foreign key). Existing phone sessions stop working
+// because requireRescuer checks that the account still exists.
+app.delete('/api/rescuers/:id', requireOfficial, async (req, res) => {
+  try {
+    const row = await dbGet('SELECT email FROM rescuers WHERE id=?', [req.params.id]);
     if (!row) return res.status(404).json({ message: 'Rescuer not found.' });
 
-    db.run('DELETE FROM rescuers WHERE id=?', [req.params.id], function (err) {
-      if (err) return res.status(500).json({ message: 'Failed to delete rescuer', error: err.message });
-      if (row.email) {
-        db.run(
-          "UPDATE users SET is_rescuer_verified=0 WHERE LOWER(email)=? AND role='rescuer'",
-          [row.email.toLowerCase()]
-        );
-      }
-      res.json({ message: 'Rescuer account rejected and deleted successfully.' });
+    await dbRun('DELETE FROM rescuers WHERE id=?', [req.params.id]);
+    let accountDeleted = false;
+    if (row.email) {
+      const result = await dbRun(
+        "DELETE FROM users WHERE LOWER(TRIM(email))=LOWER(TRIM(?)) AND role='rescuer'",
+        [row.email]
+      );
+      accountDeleted = result.changes > 0;
+    }
+    res.json({
+      message: 'Rescuer account deleted. The same email can register again. Their field logs were kept.',
+      accountDeleted,
     });
-  });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete rescuer', error: err.message });
+  }
 });
 
 // POST /api/rescuers/dispatch
@@ -1038,33 +1294,92 @@ app.get('/api/admin/rescuers', requireAdminKey, (req, res) => {
   });
 });
 
-app.post('/api/admin/rescuers/:id/approve', requireAdminKey, (req, res) => {
-  db.run('UPDATE users SET is_rescuer_verified=1 WHERE id=? AND role=?', [req.params.id, 'rescuer'], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Rescuer account not found.' });
+// Dual-table rule: these routes update users.is_rescuer_verified AND the
+// matching rescuers row (by email) so the mobile app and web panel agree.
+async function setRescuerApproval(userRow, approved) {
+  await dbRun('UPDATE users SET is_rescuer_verified=? WHERE id=? AND role=?', [approved ? 1 : 0, userRow.id, 'rescuer']);
+  await dbRun(
+    'UPDATE rescuers SET is_verified=?, status=? WHERE LOWER(TRIM(email))=LOWER(TRIM(?))',
+    [approved ? 1 : 0, approved ? 'available' : 'offline', userRow.email]
+  );
+}
+
+app.post('/api/admin/rescuers/:id/approve', requireAdminKey, async (req, res) => {
+  try {
+    const user = await dbGet("SELECT id, email FROM users WHERE id=? AND role='rescuer'", [req.params.id]);
+    if (!user) return res.status(404).json({ error: 'Rescuer account not found.' });
+    await setRescuerApproval(user, true);
     res.json({ success: true, message: 'Rescuer approved successfully.' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/admin/rescuers/approve-by-email', requireAdminKey, (req, res) => {
+app.post('/api/admin/rescuers/approve-by-email', requireAdminKey, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'email is required.' });
-  db.run("UPDATE users SET is_rescuer_verified=1 WHERE LOWER(email)=? AND role='rescuer'",
-    [email.trim().toLowerCase()],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: 'Rescuer account not found.' });
-      res.json({ success: true, message: 'Rescuer approved and synced.' });
-    }
-  );
+  try {
+    const user = await dbGet("SELECT id, email FROM users WHERE LOWER(email)=? AND role='rescuer'", [String(email).trim().toLowerCase()]);
+    if (!user) return res.status(404).json({ error: 'Rescuer account not found.' });
+    await setRescuerApproval(user, true);
+    res.json({ success: true, message: 'Rescuer approved and synced.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/admin/rescuers/:id/reject', requireAdminKey, (req, res) => {
-  db.run('UPDATE users SET is_rescuer_verified=0 WHERE id=? AND role=?', [req.params.id, 'rescuer'], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Rescuer account not found.' });
+app.post('/api/admin/rescuers/:id/reject', requireAdminKey, async (req, res) => {
+  try {
+    const user = await dbGet("SELECT id, email FROM users WHERE id=? AND role='rescuer'", [req.params.id]);
+    if (!user) return res.status(404).json({ error: 'Rescuer account not found.' });
+    await setRescuerApproval(user, false);
     res.json({ success: true, message: 'Rescuer status set to rejected/pending.' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Barangay official approval (new web-dashboard accounts) ────────────────────
+app.get('/api/admin/officials', requireAdminKey, async (req, res) => {
+  try {
+    const rows = await dbAll(
+      "SELECT id, first_name, last_name, email, is_verified, official_approved, created_at FROM users WHERE role='barangay_official' ORDER BY created_at DESC"
+    );
+    res.json(rows.map(u => ({
+      id: u.id,
+      name: `${u.first_name} ${u.last_name}`.trim(),
+      email: u.email,
+      is_verified: u.is_verified,
+      official_approved: u.official_approved,
+      created_at: u.created_at,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/officials/:id/approve', requireAdminKey, async (req, res) => {
+  try {
+    const result = await dbRun("UPDATE users SET official_approved=1 WHERE id=? AND role='barangay_official'", [req.params.id]);
+    if (result.changes === 0) return res.status(404).json({ error: 'Barangay official account not found.' });
+    res.json({ success: true, message: 'Barangay official approved.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/officials/:id/reject', requireAdminKey, async (req, res) => {
+  try {
+    const user = await dbGet("SELECT id, official_approved FROM users WHERE id=? AND role='barangay_official'", [req.params.id]);
+    if (!user) return res.status(404).json({ error: 'Barangay official account not found.' });
+    if (!isOfficialPending(user)) {
+      return res.status(400).json({ error: 'This account is already approved and cannot be rejected here.' });
+    }
+    await dbRun("DELETE FROM users WHERE id=? AND role='barangay_official' AND official_approved=0", [user.id]);
+    res.json({ success: true, message: 'Barangay official registration rejected and removed.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/admin/stats', requireAdminKey, (req, res) => {
@@ -1256,8 +1571,8 @@ app.post('/api/households/broadcast', requireOfficial, (req, res) => {
     if (err) return res.status(500).json({ message: 'Database query error', error: err.message });
     console.log(`[BROADCAST] ${rows.length} households (${purok_zone||'All Zones'}): "${message}"`);
     res.json({
-      message: `SMS alert transmitted to ${rows.length} registered household contact(s).`,
-      recipientsCount: rows.length, timestamp: new Date().toISOString(),
+      message: `Broadcast recorded for ${rows.length} household contact(s). SMS sending is not connected yet, so no messages were sent.`,
+      recipientsCount: rows.length, smsSent: false, timestamp: new Date().toISOString(),
     });
   });
 });
@@ -1403,12 +1718,12 @@ app.post('/api/manpower/trigger-alert', requireOfficial, (req, res) => {
   const { barangay_name, custom_message } = req.body;
   if (!barangay_name) return res.status(400).json({ message: 'Barangay Name is required.' });
   db.run(
-    "UPDATE manpower_alerts SET alert_level='CRITICAL RED', mobilization_status='Emergency Mobilization Broadcast Sent' WHERE barangay_name=?",
+    "UPDATE manpower_alerts SET alert_level='CRITICAL RED', mobilization_status='Red Alert Recorded (no broadcast sent)' WHERE barangay_name=?",
     [barangay_name],
     err => {
       if (err) return res.status(500).json({ message: 'Failed to update alert state', error: err.message });
       console.log(`[MANPOWER RED ALERT] Barangay ${barangay_name}: "${custom_message || 'ALL UNITS REPORT IMMEDIATELY.'}"`);
-      res.json({ message: `Emergency Red Alert triggered for Barangay ${barangay_name}.`, barangay_name, timestamp: new Date().toISOString() });
+      res.json({ message: `Red alert recorded for Barangay ${barangay_name}. No broadcast was sent.`, barangay_name, broadcastSent: false, timestamp: new Date().toISOString() });
     }
   );
 });
@@ -1426,7 +1741,7 @@ app.post('/api/manpower/mutual-aid-transfer', requireOfficial, (req, res) => {
     function (err) {
       if (err) return res.status(500).json({ message: 'Failed to record mutual aid transfer', error: err.message });
       db.run("UPDATE manpower_alerts SET mobilization_status='Mutual Aid Reinforcements En-Route' WHERE barangay_name=?", [to_barangay]);
-      res.status(201).json({ message: `${total} personnel dispatched from ${from_barangay} to ${to_barangay}.`, transferId: this.lastID, total_personnel: total });
+      res.status(201).json({ message: `Mutual aid transfer recorded: ${total} personnel from ${from_barangay} to ${to_barangay}.`, transferId: this.lastID, total_personnel: total });
     }
   );
 });
@@ -1446,13 +1761,13 @@ app.post('/api/manpower/escalate-agency', requireOfficial, (req, res) => {
   const refNo = `ESC-ZCD-${Math.floor(1000 + Math.random() * 9000)}`;
   db.run(
     `INSERT INTO manpower_escalations (reference_no, target_barangays, disaster_type, scenario_level, requested_agency, requested_units, total_reinforcements, priority, notes, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Acknowledged & Dispatched')`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Recorded - not transmitted')`,
     [refNo, Array.isArray(target_barangays) ? target_barangays.join(', ') : target_barangays,
      disaster_type||'Flash Flood', scenario_level||'Level 4 - Worst-Case Catastrophe',
      requested_agency, requested_units, parseInt(total_reinforcements||10), priority, notes||'Emergency Disaster Augmentation Requisition'],
     function (err) {
       if (err) return res.status(500).json({ message: 'Failed to record agency escalation', error: err.message });
-      res.status(201).json({ message: `Escalation transmitted to ${requested_agency}. Reference: ${refNo}`, reference_no: refNo, escalationId: this.lastID });
+      res.status(201).json({ message: `Escalation request recorded (reference ${refNo}). It was not sent to ${requested_agency}; contact the agency directly.`, reference_no: refNo, escalationId: this.lastID, transmitted: false });
     }
   );
 });
@@ -1499,12 +1814,23 @@ app.get('/api/manpower/export', requireOfficial, (req, res) => {
 });
 
 // ── Start server ──────────────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚨 ZamboAlert Unified Backend running on http://0.0.0.0:${PORT}`);
-  console.log(`   LoRa telemetry, Citizen SOS, Mobile Auth, Web Admin API — all on :${PORT}`);
-  console.log(`   SQLite DB: ${require('./database').db ? 'connected' : 'initializing...'}\n`);
-  startKeepAwake();
-});
+// Only when run directly (npm start / npm run dev). Tests require() the app and
+// listen on their own ephemeral port.
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚨 ZamboAlert Unified Backend running on http://0.0.0.0:${PORT}`);
+    console.log(`   LoRa telemetry, Citizen SOS, Mobile Auth, Web Admin API — all on :${PORT}`);
+    console.log(`   SQLite DB: ${require('./database').db ? 'connected' : 'initializing...'}\n`);
+    startKeepAwake();
+  });
+}
+
+module.exports = app;
+module.exports.sentMail = sentMail;  // NODE_ENV=test mail capture
+module.exports.dbReady = dbReady;    // resolves when schema migrations are done
+module.exports.db = db;
+module.exports.podTelemetry = podTelemetry;
+module.exports.citizenSos = citizenSos;
 
 // ── Keep-awake (Render free tier) ─────────────────────────────────────────────
 // Free Render web services sleep after 15 min without inbound traffic, and a

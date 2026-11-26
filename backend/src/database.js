@@ -26,6 +26,13 @@ const path = require('path');
 
 const DB_PATH = process.env.ZAMBOALERT_DB_PATH || path.join(__dirname, 'zamboalert.db');
 
+// Resolves once every CREATE TABLE / ALTER TABLE migration and the default
+// settings seed have finished. Tests await it before the first request.
+let resolveReady;
+const ready = new Promise(resolve => { resolveReady = resolve; });
+let resolveSeeded;
+const seeded = new Promise(resolve => { resolveSeeded = resolve; });
+
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error('Database connection error:', err.message);
@@ -73,6 +80,25 @@ function createTables() {
     const userCols = ['username', 'password_bcrypt', 'two_fa_code', 'two_fa_expires', 'password_reset_code'];
     userCols.forEach(col => {
       db.run(`ALTER TABLE users ADD COLUMN ${col} TEXT`, () => {});
+    });
+
+    // Typed columns added later (security: approval, code expiry, attempt limits).
+    // official_approved defaults to 1 so accounts that existed before this
+    // column was added stay approved; /api/auth/register inserts new
+    // barangay officials with 0 (pending admin approval).
+    const typedUserCols = [
+      'official_approved INTEGER DEFAULT 1',
+      'password_reset_expires INTEGER',
+      'password_reset_attempts INTEGER DEFAULT 0',
+      'two_fa_attempts INTEGER DEFAULT 0',
+      'two_fa_resends INTEGER DEFAULT 0',
+      'email_verification_attempts INTEGER DEFAULT 0',
+      'lockout_until INTEGER',
+      'doc_upload_token_hash TEXT',
+      'doc_upload_token_expires INTEGER',
+    ];
+    typedUserCols.forEach(def => {
+      db.run(`ALTER TABLE users ADD COLUMN ${def}`, () => {});
     });
 
     // ── Rescuers (web admin approval panel) ──────────────────────────────────
@@ -151,8 +177,10 @@ function createTables() {
     `, () => {
       db.get("SELECT COUNT(*) as count FROM settings", [], (err, row) => {
         if (!err && row && row.count === 0) {
-          db.run("INSERT INTO settings (key, value) VALUES ('require_rescuer_approval', '1')");
+          db.run("INSERT INTO settings (key, value) VALUES ('require_rescuer_approval', '1')", () => resolveSeeded());
           console.log('[DB] Seeded default settings.');
+        } else {
+          resolveSeeded();
         }
       });
     });
@@ -281,6 +309,11 @@ function createTables() {
       )
     `);
 
+    // Runs after every statement queued above (serialized), then waits for the
+    // settings seed, so `ready` means the schema is complete.
+    db.get('SELECT 1', [], () => {
+      seeded.then(() => resolveReady());
+    });
   });
 }
 
@@ -288,4 +321,4 @@ function createTables() {
 const podTelemetry = [];   // LoRa hardware pods
 const citizenSos = [];     // Citizen phone GPS SOS beacons
 
-module.exports = { db, podTelemetry, citizenSos };
+module.exports = { db, ready, podTelemetry, citizenSos };
